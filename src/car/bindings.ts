@@ -5,7 +5,7 @@ import { STR } from '../config/strings.ts';
  * so they're the same physical keys on any layout). Esc always pauses, whatever
  * is bound, so there's always a way out.
  */
-export const DRIVE_ACTIONS = ['throttle', 'brake', 'left', 'right', 'gearUp', 'gearDown', 'reset', 'camera', 'pause', 'mute', 'tower', 'boxCall', 'paceMode'] as const;
+export const DRIVE_ACTIONS = ['throttle', 'brake', 'left', 'right', 'gearUp', 'gearDown', 'reset', 'camera', 'pause', 'mute', 'tower'] as const;
 export type DriveAction = (typeof DRIVE_ACTIONS)[number];
 export type KeyBindings = Record<DriveAction, string[]>;
 
@@ -24,8 +24,6 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   pause: ['KeyP'],
   mute: ['KeyM'],
   tower: ['KeyT'],
-  boxCall: ['KeyB'],
-  paceMode: ['KeyJ'],
 };
 
 /** Always pauses (and closes menus), and can't be bound to anything else. */
@@ -161,7 +159,7 @@ export function keysText(b: KeyBindings, action: DriveAction): string {
  * with AI cars the timing tower's, and in practice that a double reset
  * restarts the lap.
  */
-export function keyboardHint(b: KeyBindings, opts: { manual: boolean; practice: boolean; tower?: boolean; pitWall?: boolean }): string {
+export function keyboardHint(b: KeyBindings, opts: { manual: boolean; practice: boolean; tower?: boolean }): string {
   const H = STR.race.hintKeys;
   const k = (a: DriveAction) => keysText(b, a);
   const parts: string[] = [];
@@ -176,10 +174,6 @@ export function keyboardHint(b: KeyBindings, opts: { manual: boolean; practice: 
   add(k('camera'), H.camera);
   add(k('mute'), H.mute);
   if (opts.tower) add(k('tower'), H.tower);
-  if (opts.pitWall) {
-    add(k('boxCall'), H.boxCall);
-    add(k('paceMode'), H.paceMode);
-  }
   add(keyLabel(PAUSE_KEY), H.pause);
   const reset = b.reset[0];
   if (opts.practice && reset) add(`${keyLabel(reset)} ${keyLabel(reset)}`, H.restart);
