@@ -33,7 +33,7 @@ const game: GameContext = {
   view3d: null, records: new RecordBook(), library: new TrackLibrary(), setup: settings().raceSetup as GameContext['setup'],
   mode: 'practice', lastResult: null, interrupted: false, preview: null,
   drive(mode) { drove = mode; }, go() {}, start() {}, openSetup() {}, closeSetup() {}, refreshPaint() {},
-  event: null, startEvent() {}, career: new CareerStore(),
+  event: null, startEvent() {}, career: new CareerStore(), lastReplay: null, replayBack: 'results', watchReplay() {},
 };
 const editor = new EditorScreen(game);
 editor.enter();

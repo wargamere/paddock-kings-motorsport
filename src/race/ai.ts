@@ -1,7 +1,7 @@
 import { CarPhysics, NO_INPUT, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
 import { standardBrake, standardGrip } from '../car/tyres.ts';
 import { HANDLING } from '../config/handling.ts';
-import { AI, CONDITIONS, DAMAGE, FLAGS, PIT_LANE, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, FLAGS, PIT_LANE, TRAFFIC, WEATHER, type Compound, PIT_WALL, type PaceMode } from '../config/race.ts';
 import { clamp, wrap } from '../core/math.ts';
 import { outerAt, type PitLane } from '../track/pitLane.ts';
 import { edgeOffsets } from '../track/spline.ts';
@@ -194,6 +194,15 @@ export class AiDriver {
 
   /** Called in to stop this lap whatever its tyres, for these (cleared once it has stopped). */
   boxCall: Compound | null = null;
+  /** The pit wall's pace call (championship teammates): faster and harder on the tyres, or slower and gentler. */
+  private paceMode: PaceMode = 'normal';
+  get mode(): PaceMode {
+    return this.paceMode;
+  }
+  set mode(m: PaceMode) {
+    this.paceMode = m;
+    this.car.wearRate = PIT_WALL.modes[m].wear;
+  }
   /** Race control: the most it may go (the safety car), and yellow flags where it is. */
   raceCap = Infinity;
   yellow = false;
@@ -520,6 +529,8 @@ export class AiDriver {
     if (this.planner.crowded) pace *= 1 - TRAFFIC.crowdEase;
     // Yellow flags: ease off.
     if (this.yellow) pace *= FLAGS.yellowPace;
+    // The pit wall's call (not after the flag).
+    if (!finished) pace *= PIT_WALL.modes[this.paceMode].pace;
     // Stuck behind a slower car that isn't an AI (you): a push to get by, like a tow (see
     // TrafficPlanner.pushing).
     if (this.planner.pushing) this.car.draft = Math.max(this.car.draft, TRAFFIC.pushTow);

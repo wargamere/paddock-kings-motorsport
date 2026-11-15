@@ -33,6 +33,8 @@ export class ResultsScreen implements Screen {
   private abort: AbortController | null = null;
   private readonly share = new ShareDialog();
   private readonly saveBtn: HTMLButtonElement;
+  /** Watch the race again (races only). */
+  private readonly replayBtn: HTMLButtonElement = button(STR.replay.open, () => { if (!this.busy) this.game.watchReplay('results'); }, { icon: '▶', key: 'V' });
   private readonly title: HTMLElement;
 
   constructor(game: GameContext) {
@@ -62,6 +64,7 @@ export class ResultsScreen implements Screen {
               { class: 'menu row' },
               button(STR.buttons.raceAgain, () => void this.raceAgain(), { icon: '⟲', class: 'primary', key: 'Enter' }),
               button(STR.buttons.newTrack, () => this.leave('editor'), { icon: '✎', key: 'E' }),
+              this.replayBtn,
             ),
             this.paint,
             h(
@@ -82,6 +85,8 @@ export class ResultsScreen implements Screen {
 
   enter(): void {
     const r = this.game.lastResult;
+    // (A replay of this very race: not one left from an earlier race.)
+    this.replayBtn.hidden = !this.game.lastReplay || !r || this.game.lastReplay.track.def.id !== r.trackId;
     this.body.replaceChildren();
     this.paintNote = null;
     this.title.textContent = r?.dnf ? STR.results.dnfTitle : STR.results.title;
@@ -136,6 +141,9 @@ export class ResultsScreen implements Screen {
         } else if (e.code === 'KeyE') {
           e.preventDefault();
           this.leave('editor');
+        } else if (e.code === 'KeyV' && !this.replayBtn.hidden) {
+          e.preventDefault();
+          this.game.watchReplay('results');
         } else if (e.code === 'KeyS') {
           e.preventDefault();
           this.raceSettings();

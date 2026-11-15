@@ -20,6 +20,8 @@ import { installOrientationPrompt, readHashCode } from './platform/web.ts';
 import { RaceScreen } from './race/raceScreen.ts';
 import { RecordBook, type RunResult } from './race/records.ts';
 import { ResultsScreen } from './race/resultsScreen.ts';
+import { ReplayScreen } from './race/replayScreen.ts';
+import type { Replay } from './race/replay.ts';
 import { View3D } from './render/view3d.ts';
 import { TrackLibrary } from './track/library.ts';
 import type { Track } from './track/track.ts';
@@ -70,6 +72,8 @@ class Game implements GameContext {
   /** The championship round being driven (null in a single race); cleared on leaving the race. */
   event: RaceEventSpec | null = null;
   lastResult: RunResult | null = null;
+  lastReplay: Replay | null = null;
+  replayBack: ScreenId = 'results';
   interrupted = false;
   preview: GameContext['preview'] = null;
   /** The single race's setup (the race setup menu's choices). */
@@ -107,12 +111,19 @@ class Game implements GameContext {
     this.screens.results = new ResultsScreen(this);
     this.screens.library = new LibraryScreen(this);
     this.screens.preview = new PreviewScreen(this);
+    this.screens.replay = new ReplayScreen(this);
     this.screens.career = new CareerScreen(this);
   }
 
   /** A championship round has its own settings; otherwise the race setup menu's. */
   get setup(): RaceSetup {
     return this.event?.setup ?? this.ownSetup;
+  }
+
+  watchReplay(back: ScreenId): void {
+    if (!this.lastReplay) return;
+    this.replayBack = back;
+    this.go('replay');
   }
 
   startEvent(event: RaceEventSpec): void {

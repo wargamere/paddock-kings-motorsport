@@ -10,7 +10,7 @@ import { currentPaintHex, recordFinishedRun } from '../car/paint.ts';
 import { CarPhysics, CarState, lerpState, NO_INPUT, STANDARD_CAR, type DriveInput } from '../car/physics.ts';
 import { HANDLING } from '../config/handling.ts';
 import { AI_PAINTS, PAINTS } from '../config/paint.ts';
-import { AI, CONDITIONS, DAMAGE, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound, PIT_WALL, type PaceMode } from '../config/race.ts';
 import { compoundLife } from '../car/tyres.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { FixedStep } from '../core/fixedStep.ts';
@@ -43,7 +43,10 @@ import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
 import { applyAssists, assistDriver } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
-import { pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
+import { pickCompound, pitLoss, preferredCompound, suggestedSetup, trackLapTime, trackTyreLife, WET_FROM } from './strategy.ts';
+import { PitWall } from '../ui/pitWall.ts';
+import { REPLAY } from '../config/replay.ts';
+import { ReplayRecorder, type RecordedCar } from './replay.ts';
 import { Weather } from './weather.ts';
 import type { TimeOfDay } from '../config/track.ts';
 import { formatGap, GapTracker } from './timing.ts';
@@ -78,6 +81,8 @@ interface Opponent {
   failAt: number | null;
   /** Retired: how long it has stood where it stopped (s). */
   outFor: number;
+  /** Its livery's second colour, if it has one (for the replay). */
+  secondary?: number;
 }
 
 /** A car of the field: an AI's name, colour and pace, and in a championship who it is, its pit box and its luck. */
@@ -140,6 +145,13 @@ export class RaceScreen implements Screen {
   private readonly aiEvents: RaceEvent[] = [];
   /** Slipstream for each car in `states` this tick. */
   private readonly drafts = new Float32Array(AI.maxField + 1);
+  /** Championship races: your AI teammate, its pit wall, and the radio messages already given. */
+  private mate: Opponent | null = null;
+  private readonly pitWall = new PitWall({ box: (c) => this.boxMate(c), mode: (m) => this.mateMode(m) });
+  private readonly radioSaid = new Set<string>();
+  /** The race being recorded for its replay (races only), and each car's hardest hit since the last sample. */
+  private replay: ReplayRecorder | null = null;
+  private replayHits: number[] = [];
   /** The cars on the track, as indices (0 = you, k + 1 = AI car k), in step with `states`. */
   private live: number[] = [0];
   /** Cars taken off the track, by the same index: retired ones once the marshals have them, and yours while the rest of the race is watched. */
@@ -176,6 +188,7 @@ export class RaceScreen implements Screen {
   private readonly labelPos = new Vector3();
   /** Ghost's ground pose and its last track index (a hint for the locator). */
   private readonly ghostGround: GroundPose = { y: 0, pitch: 0, roll: 0 };
+  private readonly scGround: GroundPose = { y: 0, pitch: 0, roll: 0 };
   private ghostIndex = -1;
   /** Strongest barrier hit since the last frame (m/s into the wall). */
   private hit = 0;
@@ -262,7 +275,7 @@ export class RaceScreen implements Screen {
     }
     this.ghostLabel = h('div', { class: 'ghost-label', text: STR.race.ghostYou });
     this.ghostLabel.hidden = true;
-    this.hud.root.append(this.ghostLabel, this.tower.root, this.watchBar);
+    this.hud.root.append(this.ghostLabel, this.tower.root, this.watchBar, this.pitWall.root);
     this.tower.onToggle = (mode) => {
       updateSettings({ tower: mode });
       this.towerIn = 0;
@@ -367,6 +380,7 @@ export class RaceScreen implements Screen {
     if (this.lineOverlay) this.lineOverlay.mesh.visible = false;
     if (this.pitMesh) this.pitMesh.visible = false;
     this.tower.hide();
+    this.pitWall.hide();
     if (this.ghostModel) this.ghostModel.root.visible = false;
     this.ghostLabel.hidden = true;
     this.clearOpponents();
@@ -550,6 +564,8 @@ export class RaceScreen implements Screen {
       : new RaceSession(t.center.length, rec.best, setup.laps, t.center.width);
     this.weather = new Weather(setup.weather, practice ? Infinity : setup.laps * trackLapTime(t));
     this.startOpponents(practice ? [YOU] : order);
+    // (With a teammate to call, the hint now names the pit wall's keys too.)
+    if (this.mate) this.hud.showHint(this.controlsText());
     if (this.opponents.length) {
       const g = gridPlace(t, order.indexOf(YOU));
       car.placeAt(g.s, g.lateral);
@@ -566,6 +582,12 @@ export class RaceScreen implements Screen {
     this.autopilot = import.meta.env.DEV && new URLSearchParams(location.search).has('autopilot') ? new RacingDriver(t, aiPace(0.8, t)) : null;
     this.syncLive();
     this.gaps = this.opponents.length ? new GapTracker(1 + this.opponents.length) : null;
+    // A race is recorded, to watch again from the results (practice isn't).
+    this.replayHits = [];
+    this.replay = practice ? null : new ReplayRecorder([
+      { name: this.myName, paint: this.myPaint, secondary: this.game.event?.you.secondary, you: true },
+      ...this.opponents.map((o) => ({ name: o.ai.name, paint: o.ai.paint, secondary: o.secondary, you: false })),
+    ], t.center.length, 1 / HANDLING.tickRate);
     this.tower.mode = settings().tower;
     this.tower.hide();
     this.towerIn = 0;
@@ -661,6 +683,7 @@ export class RaceScreen implements Screen {
   /** AI cars in their grid slots (from `order`; the field is listed fastest first). */
   private startOpponents(order: number[]): void {
     this.clearOpponents();
+    this.mate = null;
     const t = this.game.track;
     const field = this.field(order.length - 1);
     const laps = this.game.setup.laps;
@@ -672,8 +695,16 @@ export class RaceScreen implements Screen {
       const label = this.aiLabels[k];
       label.textContent = f.name;
       const failAt = f.failAt === undefined ? null : f.failAt * laps * t.center.length;
-      this.opponents.push({ id: f.id ?? String(k), ai, model, view: new CarState(), label, prev: { s: 0, lateral: 0, along: 0 }, failAt, outFor: 0 });
+      this.opponents.push({ id: f.id ?? String(k), ai, model, view: new CarState(), label, prev: { s: 0, lateral: 0, along: 0 }, failAt, outFor: 0, secondary: f.secondary });
     });
+    // A championship race: your teammate (the car sharing your pit box) is yours to call from the pit wall.
+    const ev = this.game.event;
+    if (ev && this.game.setup.mode === 'race' && this.game.setup.tyreWear) {
+      const k = field.findIndex((f) => f.box === ev.you.box);
+      if (k >= 0) this.mate = this.opponents[k] ?? null;
+    }
+    this.radioSaid.clear();
+    this.pitWall.hide();
   }
 
   private clearOpponents(): void {
@@ -727,7 +758,7 @@ export class RaceScreen implements Screen {
     if (d === 'touch') return STR.race.hintTouch + (manual ? STR.race.hintGearsTouch : '');
     const practice = this.game.mode === 'practice';
     if (d === 'gamepad') return STR.race.hintGamepad + (manual ? STR.race.hintGearsGamepad : '') + (practice ? STR.race.hintRestartGamepad : '');
-    return keyboardHint(settings().keys, { manual, practice, tower: this.opponents.length > 0 });
+    return keyboardHint(settings().keys, { manual, practice, tower: this.opponents.length > 0, pitWall: !!this.mate });
   }
 
   private onAction(a: InputAction): void {
@@ -746,7 +777,11 @@ export class RaceScreen implements Screen {
     else if (this.paused) return;
     else if (a === 'reset') this.onReset();
     else if (a === 'camera') this.rig.toggle();
-    else if (a === 'tower') {
+    else if (a === 'boxCall') {
+      if (this.mate && this.stage === 'run') this.pitWall.toggleBox();
+    } else if (a === 'paceMode') {
+      if (this.mate && this.stage === 'run') this.pitWall.cycleMode();
+    } else if (a === 'tower') {
       // Full → compact → hidden → full.
       const next = ({ full: 'compact', compact: 'off', off: 'full' } as const)[this.tower.mode];
       this.tower.mode = next;
@@ -885,6 +920,7 @@ export class RaceScreen implements Screen {
     this.retirements(dt);
     this.chequeredFlag();
     if (this.control) this.raceControl(dt);
+    this.recordReplay();
     // Timing: when each car passes each mark of the race distance.
     const gaps = this.gaps;
     if (gaps) {
@@ -953,6 +989,9 @@ export class RaceScreen implements Screen {
     const done = (x: RaceSession) => x.phase === 'finished' && !x.retired;
     if (!done(s) && !this.opponents.some((o) => done(o.ai.session))) return;
     this.flagOut = true;
+    // The winner, for the replay's finish.
+    const winner = done(s) ? 0 : this.opponents.findIndex((o) => done(o.ai.session)) + 1;
+    this.replay?.mark('finish', winner);
     s.flagged = true;
     for (const o of this.opponents) o.ai.session.flagged = true;
     // (Lapped: this lap is your last.)
@@ -995,6 +1034,7 @@ export class RaceScreen implements Screen {
     const R = STR.race;
     for (const e of ev) {
       if (e.type === 'sc-out') {
+        this.replay?.mark('safetyCar');
         this.hud.flash(R.safetyCarOut, 'bad', 3);
         audio.beep(440, 0.25);
       } else if (e.type === 'sc-in') this.hud.flash(R.safetyCarIn, 'info', 3);
@@ -1105,6 +1145,7 @@ export class RaceScreen implements Screen {
         audio.beep(520);
         break;
       case 'go':
+        if (this.stage === 'run') this.replay?.mark('start');
         this.hud.flash(STR.race.go, 'big', 0.8);
         audio.beep(1040, 0.45, 0.28);
         break;
@@ -1174,6 +1215,11 @@ export class RaceScreen implements Screen {
     if (s.newBest || newBestScore) platform.happytime();
     const unlockedPaints = recordFinishedRun();
     const order = this.finishingOrder();
+    // The recording, to watch again from the results.
+    if (this.replay) {
+      this.game.lastReplay = this.replay.finish({ track: t, time: this.timeOfDay, rain: this.weather.kind === 'rain', laps: s.lapsToRun });
+      this.replay = null;
+    }
     this.game.lastResult = {
       trackId: t.def.id,
       trackName: t.def.name,
@@ -1379,6 +1425,7 @@ export class RaceScreen implements Screen {
     const car = this.car;
     if (!gaps || !s || !car || this.stage !== 'run') {
       this.tower.hide();
+      this.pitWall.hide();
       return;
     }
     const T = STR.tower;
@@ -1429,6 +1476,84 @@ export class RaceScreen implements Screen {
       footer = behind ? fmt(T.rejoin, { pos: `P${pos + passed}`, name: behind.name }) : fmt(T.rejoinKeep, { pos: `P${pos}` });
     }
     this.tower.update(rows, footer);
+    this.updatePitWall(order, gapTo);
+  }
+
+  /**
+   * The pit wall (championship races): your teammate's car and the calls
+   * for it, and your race engineer's radio: a car just ahead or behind you
+   * pitting (the undercut), your teammate's tyres going off, the weather
+   * turning. Each message once.
+   */
+  private updatePitWall(order: Entry[], gapTo: (e: Entry) => number | null): void {
+    const mate = this.mate, s = this.session!;
+    const idx = mate ? this.opponents.indexOf(mate) + 1 : -1;
+    const me = order.find((e) => e.idx === idx);
+    if (!mate || !me || this.stage !== 'run' || this.watching) {
+      this.pitWall.hide();
+      return;
+    }
+    const W = STR.pitWall;
+    const car = mate.ai.car, ms = mate.ai.session, L = s.length;
+    const lapsLeft = Math.max(0, (ms.lapsToRun * L - me.dist) / L);
+    const i = order.indexOf(me);
+    const ahead = i > 0 ? order[i - 1] : null;
+    const gap = ahead ? gapTo(ahead) !== null && gapTo(me) !== null ? (gapTo(me)! - gapTo(ahead)!) : null : null;
+    // The tyres to suggest: rain tyres in the wet, slicks once it's drying, otherwise what lasts the rest of the race.
+    const wet = car.wetness >= WET_FROM;
+    this.pitWall.suggest(pickCompound(lapsLeft, car.mediumLife, wet ? 1 : 0, preferredCompound(0)));
+    this.pitWall.show({
+      name: mate.ai.name, pos: i + 1, gapAhead: gap !== null && gap > 0 ? gap.toFixed(1) : '',
+      tyre: car.wear ? car.compound : null, tyreAge: car.tyreAge, tyreLeft: car.tyreLeft, lapsLeft,
+      mode: mate.ai.mode, boxCall: mate.ai.boxCall, pitting: mate.ai.pitting, out: me.out || ms.phase === 'finished',
+    });
+    if (s.phase !== 'racing' || ms.phase !== 'racing') return;
+    // The radio. A message is said once (per stint, for the tyres).
+    const say = (key: string, text: string) => {
+      if (this.radioSaid.has(key)) return;
+      this.radioSaid.add(key);
+      this.pitWall.setRadio(text);
+      this.hud.flash(text, 'info', 3.5);
+      audio.beep(760, 0.08);
+    };
+    const stops = mate.ai.crew?.stops ?? 0;
+    if (!mate.ai.boxCall && !mate.ai.pitting && lapsLeft > 1) {
+      if (car.tyreLeft < PIT_WALL.tyresLow) say(`tyres:${stops}`, fmt(W.mateTyres, { name: mate.ai.name }));
+      else if (wet && car.compound !== 'wet') say(`rain:${stops}`, fmt(W.mateRain, { name: mate.ai.name }));
+      else if (!wet && car.compound === 'wet' && car.wetness < WET_FROM * 0.6) say(`dry:${stops}`, fmt(W.mateDry, { name: mate.ai.name }));
+    }
+    // The undercut: the car just ahead of you or just behind, close, has pitted.
+    const you = order.findIndex((e) => e.you);
+    const youLeft = (s.lapsToRun * L - order[you].dist) / L;
+    if (this.car?.wear && !order[you].out && youLeft > 1.5) {
+      for (const j of [you - 1, you + 1]) {
+        const e = order[j];
+        if (!e || e.you || e.out || e.idx === idx) continue;
+        const o = this.opponents[e.idx - 1];
+        const g = gapTo(e);
+        if (!o?.ai.pitting || g === null || Math.abs(g) > PIT_WALL.undercutGap) continue;
+        say(`undercut:${e.idx}:${o.ai.crew?.stops ?? 0}`, fmt(W.undercut, { name: e.name, pos: j + 1 }));
+      }
+    }
+  }
+
+  /** A call from the pit wall: box your teammate (for `tyres`; null calls it off), or its pace. */
+  private boxMate(tyres: Compound | null): void {
+    const mate = this.mate;
+    if (!mate || mate.ai.pitting || mate.ai.session.phase !== 'racing') return;
+    mate.ai.boxCall = tyres;
+    const W = STR.pitWall;
+    this.hud.flash(tyres ? fmt(W.boxed, { name: mate.ai.name, tyres: STR.tyres.lower[tyres] }) : fmt(W.unboxed, { name: mate.ai.name }), tyres ? 'good' : 'info', 2.5);
+    audio.beep(tyres ? 990 : 520, 0.1);
+    this.towerIn = 0;
+  }
+
+  private mateMode(m: PaceMode): void {
+    const mate = this.mate;
+    if (!mate || mate.ai.session.phase !== 'racing') return;
+    mate.ai.mode = m;
+    this.hud.flash(fmt(STR.pitWall.mode, { name: mate.ai.name, mode: STR.pitWall.modeNames[m] }), 'info', 2.2);
+    this.towerIn = 0;
   }
 
   /** Advances the bot's timed lap a little; when done, the medal times are saved and shown. */
@@ -1484,19 +1609,21 @@ export class RaceScreen implements Screen {
   /** The safety car, a little way ahead of the leader on the racing line, while it's out. */
   private placeSafetyCar(): void {
     const m = this.scModel;
-    const control = this.control;
     if (!m) return;
-    const show = !!control && control.sc !== 'none' && this.controlCars.length > 0;
-    m.root.visible = show;
-    if (!show) return;
+    const pose = this.safetyCarPose();
+    m.root.visible = !!pose;
+    if (pose) m.setPose(pose.x, pose.y, pose.z, pose.heading, pose.pitch, pose.roll);
+  }
+
+  /** Where the safety car is (ahead of the leader on the racing line), or null when it isn't out. */
+  private safetyCarPose(): { x: number; y: number; z: number; heading: number; pitch: number; roll: number } | null {
+    const control = this.control;
+    if (!control || control.sc === 'none' || !this.controlCars.length) return null;
     let lead = -1;
     this.controlCars.forEach((c, i) => {
       if (!c.out && (lead < 0 || c.dist > this.controlCars[lead].dist)) lead = i;
     });
-    if (lead < 0) {
-      m.root.visible = false;
-      return;
-    }
+    if (lead < 0) return null;
     const t = this.game.track;
     const c = t.center;
     const L = c.length;
@@ -1507,8 +1634,28 @@ export class RaceScreen implements Screen {
     const x = at.p.x + l.x * lat;
     const z = at.p.y + l.y * lat;
     const heading = Math.atan2(at.t.y, at.t.x);
-    const g = groundPose(t, surfaceFor(t), x, z, heading, { index: Math.round(s / c.spacing) % c.points.length, s, lateral: lat }, this.ghostGround);
-    m.setPose(x, g.y, z, heading, g.pitch, g.roll);
+    const g = groundPose(t, surfaceFor(t), x, z, heading, { index: Math.round(s / c.spacing) % c.points.length, s, lateral: lat }, this.scGround);
+    return { x, y: g.y, z, heading, pitch: g.pitch, roll: g.roll };
+  }
+
+  /**
+   * The replay: every REPLAY.everyTicks ticks of a race, a sample of every car
+   * (and the safety car), with the hardest hits since the last one.
+   */
+  private recordReplay(): void {
+    const rec = this.replay, s = this.session;
+    if (!rec || !s || this.stage !== 'run') return;
+    const n = 1 + this.opponents.length;
+    for (let i = 0; i < n; i++) this.replayHits[i] = Math.max(this.replayHits[i] ?? 0, this.hits[i] ?? 0);
+    if (s.tick % REPLAY.everyTicks) return;
+    const cars: RecordedCar[] = [];
+    const add = (st: CarState, x: RaceSession, idx: number, pitting: boolean) => cars.push({
+      st, dist: x.raceDistance(st.s), racing: x.phase === 'racing' && x.lapStart !== null && !x.retired, pitting, retired: x.retired, present: !this.gone[idx], hit: this.replayHits[idx] ?? 0,
+    });
+    add(this.car!.state, s, 0, !!this.crew?.busy || this.car!.state.inPits);
+    this.opponents.forEach((o, k) => add(o.ai.car.state, o.ai.session, k + 1, o.ai.pitting || o.ai.car.state.inPits));
+    rec.sample(cars, this.safetyCarPose());
+    this.replayHits.fill(0);
   }
 
   frame(dt: number): void {

@@ -232,6 +232,26 @@ export const SETUP = {
   },
 } as const;
 
+/**
+ * The pit wall (championship races): the calls you make for your AI
+ * teammate. A pace mode drives at `pace` × its usual pace and wears the
+ * tyres `wear` × as fast (pushing slides them more; saving them is gentler on
+ * the throttle). Radio messages: a car within `undercutGap` s of you that
+ * pits is an undercut threat; your teammate's tyres are "going off" with
+ * less than `tyresLow` of their life left.
+ */
+export type PaceMode = 'push' | 'normal' | 'save';
+export const PIT_WALL = {
+  modes: {
+    push: { pace: 1.01, wear: 1.3 },
+    normal: { pace: 1, wear: 1 },
+    save: { pace: 0.985, wear: 0.72 },
+  },
+  order: ['normal', 'push', 'save'],
+  undercutGap: 3,
+  tyresLow: 0.2,
+} as const;
+
 /** A kind of tyre (see TYRES.compounds). */
 export type Compound = 'soft' | 'medium' | 'hard' | 'wet';
 

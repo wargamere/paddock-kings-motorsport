@@ -3,13 +3,14 @@ import type { CarPerformance } from '../car/physics.ts';
 import type { Compound } from '../config/race.ts';
 import type { TimeOfDay } from '../config/track.ts';
 import type { RecordBook, RunResult } from '../race/records.ts';
+import type { Replay } from '../race/replay.ts';
 import type { View3D } from '../render/view3d.ts';
 import type { TrackLibrary } from '../track/library.ts';
 import type { Track } from '../track/track.ts';
 import type { Surface2D } from './surface2d.ts';
 
 /** States of the main state machine (see main.ts). */
-export type ScreenId = 'menu' | 'setup' | 'race' | 'editor' | 'results' | 'library' | 'preview' | 'career';
+export type ScreenId = 'menu' | 'setup' | 'race' | 'editor' | 'results' | 'library' | 'preview' | 'career' | 'replay';
 
 /** How the race screen runs: free practice laps, or a timed race with a countdown and results. */
 export type DriveMode = 'practice' | 'race';
@@ -157,6 +158,12 @@ export interface GameContext {
   readonly library: TrackLibrary;
   /** The run the results screen shows. */
   lastResult: RunResult | null;
+  /** The last race's recording (see race/replay.ts), to watch again. */
+  lastReplay: Replay | null;
+  /** Plays the last race's replay; Back returns to screen `back`. */
+  watchReplay(back: ScreenId): void;
+  /** Where the replay screen goes back to. */
+  readonly replayBack: ScreenId;
   /** True while something outside the game needs it paused (portrait prompt, video ads). */
   interrupted: boolean;
   /** Re-applies the selected paint to the car. */
