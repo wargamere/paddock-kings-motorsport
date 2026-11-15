@@ -10,7 +10,7 @@ import { currentPaintHex, recordFinishedRun } from '../car/paint.ts';
 import { CarPhysics, CarState, lerpState, NO_INPUT, STANDARD_CAR, type DriveInput } from '../car/physics.ts';
 import { HANDLING } from '../config/handling.ts';
 import { AI_PAINTS, PAINTS } from '../config/paint.ts';
-import { AI, CONDITIONS, DAMAGE, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound, PIT_WALL, type PaceMode } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
 import { compoundLife } from '../car/tyres.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { FixedStep } from '../core/fixedStep.ts';
@@ -43,8 +43,9 @@ import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
 import { applyAssists, assistDriver } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
-import { pickCompound, pitLoss, preferredCompound, suggestedSetup, trackLapTime, trackTyreLife, WET_FROM } from './strategy.ts';
-import { PitWall } from '../ui/pitWall.ts';
+import { pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
+import { RaceEngineer, type EngineerCar, type EngineerView } from './engineer.ts';
+import { Radio } from '../ui/radio.ts';
 import { REPLAY } from '../config/replay.ts';
 import { ReplayRecorder, type RecordedCar } from './replay.ts';
 import { Weather } from './weather.ts';
@@ -145,10 +146,9 @@ export class RaceScreen implements Screen {
   private readonly aiEvents: RaceEvent[] = [];
   /** Slipstream for each car in `states` this tick. */
   private readonly drafts = new Float32Array(AI.maxField + 1);
-  /** Championship races: your AI teammate, its pit wall, and the radio messages already given. */
-  private mate: Opponent | null = null;
-  private readonly pitWall = new PitWall({ box: (c) => this.boxMate(c), mode: (m) => this.mateMode(m) });
-  private readonly radioSaid = new Set<string>();
+  /** Your race engineer (in a race), and the radio you hear them on. */
+  private engineer: RaceEngineer | null = null;
+  private readonly radio = new Radio();
   /** The race being recorded for its replay (races only), and each car's hardest hit since the last sample. */
   private replay: ReplayRecorder | null = null;
   private replayHits: number[] = [];
@@ -275,7 +275,7 @@ export class RaceScreen implements Screen {
     }
     this.ghostLabel = h('div', { class: 'ghost-label', text: STR.race.ghostYou });
     this.ghostLabel.hidden = true;
-    this.hud.root.append(this.ghostLabel, this.tower.root, this.watchBar, this.pitWall.root);
+    this.hud.root.append(this.ghostLabel, this.tower.root, this.watchBar, this.radio.root);
     this.tower.onToggle = (mode) => {
       updateSettings({ tower: mode });
       this.towerIn = 0;
@@ -380,7 +380,7 @@ export class RaceScreen implements Screen {
     if (this.lineOverlay) this.lineOverlay.mesh.visible = false;
     if (this.pitMesh) this.pitMesh.visible = false;
     this.tower.hide();
-    this.pitWall.hide();
+    this.radio.hide();
     if (this.ghostModel) this.ghostModel.root.visible = false;
     this.ghostLabel.hidden = true;
     this.clearOpponents();
@@ -564,8 +564,7 @@ export class RaceScreen implements Screen {
       : new RaceSession(t.center.length, rec.best, setup.laps, t.center.width);
     this.weather = new Weather(setup.weather, practice ? Infinity : setup.laps * trackLapTime(t));
     this.startOpponents(practice ? [YOU] : order);
-    // (With a teammate to call, the hint now names the pit wall's keys too.)
-    if (this.mate) this.hud.showHint(this.controlsText());
+    this.engineer = setup.mode === 'race' ? new RaceEngineer() : null;
     if (this.opponents.length) {
       const g = gridPlace(t, order.indexOf(YOU));
       car.placeAt(g.s, g.lateral);
@@ -683,7 +682,6 @@ export class RaceScreen implements Screen {
   /** AI cars in their grid slots (from `order`; the field is listed fastest first). */
   private startOpponents(order: number[]): void {
     this.clearOpponents();
-    this.mate = null;
     const t = this.game.track;
     const field = this.field(order.length - 1);
     const laps = this.game.setup.laps;
@@ -697,14 +695,7 @@ export class RaceScreen implements Screen {
       const failAt = f.failAt === undefined ? null : f.failAt * laps * t.center.length;
       this.opponents.push({ id: f.id ?? String(k), ai, model, view: new CarState(), label, prev: { s: 0, lateral: 0, along: 0 }, failAt, outFor: 0, secondary: f.secondary });
     });
-    // A championship race: your teammate (the car sharing your pit box) is yours to call from the pit wall.
-    const ev = this.game.event;
-    if (ev && this.game.setup.mode === 'race' && this.game.setup.tyreWear) {
-      const k = field.findIndex((f) => f.box === ev.you.box);
-      if (k >= 0) this.mate = this.opponents[k] ?? null;
-    }
-    this.radioSaid.clear();
-    this.pitWall.hide();
+    this.radio.hide();
   }
 
   private clearOpponents(): void {
@@ -758,7 +749,7 @@ export class RaceScreen implements Screen {
     if (d === 'touch') return STR.race.hintTouch + (manual ? STR.race.hintGearsTouch : '');
     const practice = this.game.mode === 'practice';
     if (d === 'gamepad') return STR.race.hintGamepad + (manual ? STR.race.hintGearsGamepad : '') + (practice ? STR.race.hintRestartGamepad : '');
-    return keyboardHint(settings().keys, { manual, practice, tower: this.opponents.length > 0, pitWall: !!this.mate });
+    return keyboardHint(settings().keys, { manual, practice, tower: this.opponents.length > 0 });
   }
 
   private onAction(a: InputAction): void {
@@ -777,11 +768,7 @@ export class RaceScreen implements Screen {
     else if (this.paused) return;
     else if (a === 'reset') this.onReset();
     else if (a === 'camera') this.rig.toggle();
-    else if (a === 'boxCall') {
-      if (this.mate && this.stage === 'run') this.pitWall.toggleBox();
-    } else if (a === 'paceMode') {
-      if (this.mate && this.stage === 'run') this.pitWall.cycleMode();
-    } else if (a === 'tower') {
+    else if (a === 'tower') {
       // Full → compact → hidden → full.
       const next = ({ full: 'compact', compact: 'off', off: 'full' } as const)[this.tower.mode];
       this.tower.mode = next;
@@ -946,6 +933,8 @@ export class RaceScreen implements Screen {
     if (car.broken && session.phase === 'racing' && !this.gone[0]) {
       if (this.stage === 'run' && this.game.mode === 'race') {
         session.retire(car.state.s);
+        if (this.engineer) this.sayRadio(this.engineer.finish(null, 1 + this.opponents.length));
+        this.engineer = null;
         this.crew?.reset(car.state);
         this.hud.showTyrePicker(null);
         this.hud.flash(R.brokenDown, 'bad', 0);
@@ -1100,8 +1089,8 @@ export class RaceScreen implements Screen {
       this.hud.flash(STR.race.repairing, 'info', this.crew?.service ?? CONDITIONS.service);
       audio.beep(660, 0.12);
     } else if (ev === 'start') {
-      // The same kind again unless you pick another (1–4, or a tap) while the crew works.
-      this.nextTyres = car.compound;
+      // What your engineer planned (else the same kind again), unless you pick another (1–4, or a tap) while the crew works.
+      this.nextTyres = this.engineer?.plan ?? car.compound;
       this.hud.showTyrePicker({
         choices: TYRES.order.map((c) => ({ compound: c, laps: compoundLife(c, car.wetness, car.mediumLife) })),
         selected: this.nextTyres,
@@ -1118,9 +1107,13 @@ export class RaceScreen implements Screen {
       this.damageWarned = 0;
       this.hud.showTyrePicker(null);
       this.hud.flash(fmt(STR.race.pitDone, { tyres: STR.tyres.names[car.compound] }), 'good', 1.4);
+      const v = this.engineerView();
+      if (v) this.engineer?.pitDone(v);
       audio.beep(990, 0.12);
       audio.beep(1320, 0.16, 0.22, 0.12);
     }
+    // (Your engineer tells you about the tyres in a race; the HUD does in practice.)
+    if (this.engineer) return;
     const left = car.tyreLeft;
     if (left <= 0 && this.tyreWarned < 2) {
       this.tyreWarned = 2;
@@ -1165,6 +1158,14 @@ export class RaceScreen implements Screen {
         }
         if (e.best) [880, 1110, 1320].forEach((f, i) => audio.beep(f, 0.16, 0.2, i * 0.11));
         else audio.beep(e.valid ? 880 : 300, 0.18);
+        if (s.phase === 'finished' && this.engineer && this.stage === 'run') {
+          const at = this.standings().findIndex((x) => x.you);
+          this.sayRadio(this.engineer.finish(at + 1, 1 + this.opponents.length));
+          this.engineer = null;
+        } else if (this.engineer && this.stage === 'run') {
+          const v = this.engineerView();
+          if (v) this.engineer.lap(v);
+        }
         if (s.phase === 'finished') {
           const pos = this.opponents.length ? this.standings().findIndex((x) => x.you) : -1;
           this.hud.setFlag(null);
@@ -1425,7 +1426,6 @@ export class RaceScreen implements Screen {
     const car = this.car;
     if (!gaps || !s || !car || this.stage !== 'run') {
       this.tower.hide();
-      this.pitWall.hide();
       return;
     }
     const T = STR.tower;
@@ -1476,85 +1476,62 @@ export class RaceScreen implements Screen {
       footer = behind ? fmt(T.rejoin, { pos: `P${pos + passed}`, name: behind.name }) : fmt(T.rejoinKeep, { pos: `P${pos}` });
     }
     this.tower.update(rows, footer);
-    this.updatePitWall(order, gapTo);
   }
 
   /**
-   * The pit wall (championship races): your teammate's car and the calls
-   * for it, and your race engineer's radio: a car just ahead or behind you
-   * pitting (the undercut), your teammate's tyres going off, the weather
-   * turning. Each message once.
+   * What your race engineer sees: your place and the gaps to the cars either
+   * side, your tyres, damage, the weather, the safety car. Null outside the race.
    */
-  private updatePitWall(order: Entry[], gapTo: (e: Entry) => number | null): void {
-    const mate = this.mate, s = this.session!;
-    const idx = mate ? this.opponents.indexOf(mate) + 1 : -1;
-    const me = order.find((e) => e.idx === idx);
-    if (!mate || !me || this.stage !== 'run' || this.watching) {
-      this.pitWall.hide();
-      return;
-    }
-    const W = STR.pitWall;
-    const car = mate.ai.car, ms = mate.ai.session, L = s.length;
-    const lapsLeft = Math.max(0, (ms.lapsToRun * L - me.dist) / L);
-    const i = order.indexOf(me);
-    const ahead = i > 0 ? order[i - 1] : null;
-    const gap = ahead ? gapTo(ahead) !== null && gapTo(me) !== null ? (gapTo(me)! - gapTo(ahead)!) : null : null;
-    // The tyres to suggest: rain tyres in the wet, slicks once it's drying, otherwise what lasts the rest of the race.
-    const wet = car.wetness >= WET_FROM;
-    this.pitWall.suggest(pickCompound(lapsLeft, car.mediumLife, wet ? 1 : 0, preferredCompound(0)));
-    this.pitWall.show({
-      name: mate.ai.name, pos: i + 1, gapAhead: gap !== null && gap > 0 ? gap.toFixed(1) : '',
-      tyre: car.wear ? car.compound : null, tyreAge: car.tyreAge, tyreLeft: car.tyreLeft, lapsLeft,
-      mode: mate.ai.mode, boxCall: mate.ai.boxCall, pitting: mate.ai.pitting, out: me.out || ms.phase === 'finished',
-    });
-    if (s.phase !== 'racing' || ms.phase !== 'racing') return;
-    // The radio. A message is said once (per stint, for the tyres).
-    const say = (key: string, text: string) => {
-      if (this.radioSaid.has(key)) return;
-      this.radioSaid.add(key);
-      this.pitWall.setRadio(text);
-      this.hud.flash(text, 'info', 3.5);
-      audio.beep(760, 0.08);
+  private engineerView(): EngineerView | null {
+    const s = this.session, car = this.car, gaps = this.gaps;
+    if (!s || !car || !gaps || this.stage !== 'run' || s.phase !== 'racing' || s.lapStart === null) return null;
+    const order = this.standings();
+    const i = order.findIndex((e) => e.you);
+    const you = order[i];
+    if (!you || you.out || you.end !== null) return null;
+    const now = s.time(), L = s.length;
+    const near = (e: Entry | undefined): EngineerCar | null => {
+      if (!e || e.out || e.end !== null) return null;
+      const o = this.opponents[e.idx - 1];
+      const g = gaps.gap(e.idx, e.dist, 0, you.dist, now);
+      return { id: e.idx, name: e.name, gap: g === null ? null : Math.abs(g), pitting: !!o?.ai.pitting, stops: o?.ai.crew?.stops ?? 0 };
     };
-    const stops = mate.ai.crew?.stops ?? 0;
-    if (!mate.ai.boxCall && !mate.ai.pitting && lapsLeft > 1) {
-      if (car.tyreLeft < PIT_WALL.tyresLow) say(`tyres:${stops}`, fmt(W.mateTyres, { name: mate.ai.name }));
-      else if (wet && car.compound !== 'wet') say(`rain:${stops}`, fmt(W.mateRain, { name: mate.ai.name }));
-      else if (!wet && car.compound === 'wet' && car.wetness < WET_FROM * 0.6) say(`dry:${stops}`, fmt(W.mateDry, { name: mate.ai.name }));
-    }
-    // The undercut: the car just ahead of you or just behind, close, has pitted.
-    const you = order.findIndex((e) => e.you);
-    const youLeft = (s.lapsToRun * L - order[you].dist) / L;
-    if (this.car?.wear && !order[you].out && youLeft > 1.5) {
-      for (const j of [you - 1, you + 1]) {
-        const e = order[j];
-        if (!e || e.you || e.out || e.idx === idx) continue;
-        const o = this.opponents[e.idx - 1];
-        const g = gapTo(e);
-        if (!o?.ai.pitting || g === null || Math.abs(g) > PIT_WALL.undercutGap) continue;
-        say(`undercut:${e.idx}:${o.ai.crew?.stops ?? 0}`, fmt(W.undercut, { name: e.name, pos: j + 1 }));
-      }
-    }
+    const grid = this.grid.indexOf(YOU);
+    return {
+      time: now - s.goTime,
+      lapsDone: s.laps.length,
+      lapsToRun: s.lapsToRun,
+      lapsLeft: Math.max(0, (s.lapsToRun * L - you.dist) / L),
+      pos: i + 1,
+      startPos: grid >= 0 ? grid + 1 : i + 1,
+      cars: order.length,
+      ahead: near(order[i - 1]),
+      behind: near(order[i + 1]),
+      pitting: !!this.crew?.busy || car.state.inPits,
+      stops: this.crew?.stops ?? 0,
+      tyres: car.wear ? { compound: car.compound, left: car.tyreLeft, lapsLeft: car.tyreLapsLeft, mediumLife: car.mediumLife, wetness: car.wetness } : null,
+      damage: car.damageOn ? car.damage : null,
+      forecast: this.weather?.forecast() ?? null,
+      safetyCar: this.control?.sc ?? 'none',
+      safetyCarCount: this.control?.scCount ?? 0,
+    };
   }
 
-  /** A call from the pit wall: box your teammate (for `tyres`; null calls it off), or its pace. */
-  private boxMate(tyres: Compound | null): void {
-    const mate = this.mate;
-    if (!mate || mate.ai.pitting || mate.ai.session.phase !== 'racing') return;
-    mate.ai.boxCall = tyres;
-    const W = STR.pitWall;
-    this.hud.flash(tyres ? fmt(W.boxed, { name: mate.ai.name, tyres: STR.tyres.lower[tyres] }) : fmt(W.unboxed, { name: mate.ai.name }), tyres ? 'good' : 'info', 2.5);
-    audio.beep(tyres ? 990 : 520, 0.1);
-    this.towerIn = 0;
+  /** Your race engineer, a few times a second. */
+  private updateEngineer(): void {
+    if (!this.engineer || this.watching) return;
+    const v = this.engineerView();
+    const call = v && this.engineer.update(v);
+    if (call) this.sayRadio(call);
   }
 
-  private mateMode(m: PaceMode): void {
-    const mate = this.mate;
-    if (!mate || mate.ai.session.phase !== 'racing') return;
-    mate.ai.mode = m;
-    this.hud.flash(fmt(STR.pitWall.mode, { name: mate.ai.name, mode: STR.pitWall.modeNames[m] }), 'info', 2.2);
-    this.towerIn = 0;
+  /** On the radio: shown, with a click and a beep. */
+  private sayRadio(call: { text: string; urgent: boolean }): void {
+    this.radio.say(call);
+    audio.beep(call.urgent ? 1150 : 1000, 0.04, 0.12);
+    audio.beep(call.urgent ? 900 : 1250, 0.05, 0.12, 0.07);
   }
+
 
   /** Advances the bot's timed lap a little; when done, the medal times are saved and shown. */
   private measureAuthor(deadline: number): void {
@@ -1751,7 +1728,9 @@ export class RaceScreen implements Screen {
     if (this.towerIn <= 0) {
       this.towerIn = 0.25;
       this.updateTower();
+      this.updateEngineer();
     }
+    this.radio.tick(dt);
     this.hud.setTyres(car.wear ? car.compound : null, car.tyreLeft, this.crew?.service ?? 0);
     this.updateHud(alpha);
     this.hud.tick(dt);

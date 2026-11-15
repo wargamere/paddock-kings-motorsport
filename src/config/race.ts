@@ -232,26 +232,6 @@ export const SETUP = {
   },
 } as const;
 
-/**
- * The pit wall (championship races): the calls you make for your AI
- * teammate. A pace mode drives at `pace` × its usual pace and wears the
- * tyres `wear` × as fast (pushing slides them more; saving them is gentler on
- * the throttle). Radio messages: a car within `undercutGap` s of you that
- * pits is an undercut threat; your teammate's tyres are "going off" with
- * less than `tyresLow` of their life left.
- */
-export type PaceMode = 'push' | 'normal' | 'save';
-export const PIT_WALL = {
-  modes: {
-    push: { pace: 1.01, wear: 1.3 },
-    normal: { pace: 1, wear: 1 },
-    save: { pace: 0.985, wear: 0.72 },
-  },
-  order: ['normal', 'push', 'save'],
-  undercutGap: 3,
-  tyresLow: 0.2,
-} as const;
-
 /** A kind of tyre (see TYRES.compounds). */
 export type Compound = 'soft' | 'medium' | 'hard' | 'wet';
 
@@ -729,3 +709,32 @@ export const SLIPSTREAM = {
   show: 0.15,
 } as const;
 
+
+/**
+ * Your race engineer on the radio (race/engineer.ts). Ordinary messages
+ * wait `gap` s after the last one; urgent ones (box calls, the safety car,
+ * the weather) only `urgentGap` s. What's said shows for `show` s, and a
+ * message that couldn't be said within `stale` s of its moment is dropped.
+ * The box call comes when the tyres would go off before the box comes round
+ * again (as the AI decides, `boxEarly` laps on the safe side); the plan is
+ * given once the stop is `planFrom` laps away. A car within `undercutGap` s
+ * pitting is a threat (behind) or a chance (ahead); with your own stop
+ * `coverLaps` laps away or less, cover it. Under the safety car a stop is
+ * cheap: take it if the tyres are below `scStopBelow` and won't last.
+ * `damageWarn` of damage: one more hit could end your race.
+ */
+export const ENGINEER = {
+  gap: 6,
+  urgentGap: 1.5,
+  show: 6.5,
+  stale: 8,
+  startAfter: 14,
+  boxEarly: 0.15,
+  planFrom: 3.5,
+  undercutGap: 3,
+  coverLaps: 2.5,
+  scStopBelow: 0.6,
+  damageWarn: 0.75,
+  /** Lap-to-lap change in a gap (s) worth mentioning. */
+  trend: 0.15,
+} as const;
