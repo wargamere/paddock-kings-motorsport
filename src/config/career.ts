@@ -40,6 +40,16 @@ export const CAREER = {
    * then the most 2nd places, and so on.
    */
   points: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
+  /**
+   * Sprint weekends, about one round in `sprintEvery` (never the first or the
+   * last): qualifying sets the sprint's grid, the sprint (a `sprintShare` of
+   * the race's laps, at least `sprintMinLaps`) sets the Grand Prix's, and
+   * pays `sprintPoints` to the top eight.
+   */
+  sprintEvery: 4,
+  sprintShare: 1 / 3,
+  sprintMinLaps: 2,
+  sprintPoints: [8, 7, 6, 5, 4, 3, 2, 1],
   /** Ten teams of two: twenty cars. */
   cars: 20,
   /** Rounds in a season of each length (out of the calendar below). */

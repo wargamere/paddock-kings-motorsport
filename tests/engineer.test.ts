@@ -162,3 +162,34 @@ test('each lap: the gaps either side and whether they are closing; the last lap;
   assert.equal(e6.finish(null, 10).text, E.retired);
   assert.equal(e6.finish(1, 1).text, E.finishedAlone);
 });
+
+test('the two-compound rule: a reminder at the start, a stop for it about half-way onto another kind, a warning once it is too late', () => {
+  const rule = (used: ('soft' | 'medium' | 'hard' | 'wet')[]) => ({ used });
+  // Tyres that last the race: no stop needed, but one is owed.
+  const owed = (over: Partial<EngineerView>) => view({ rule: rule(['medium']), ...over }, { lapsLeft: 12, left: 0.9 });
+  const eng = new RaceEngineer();
+  assert.equal(eng.update(owed({ time: ENGINEER.ruleAfter, lapsDone: 0, lapsLeft: 9.8 }))?.text, E.ruleReminder);
+  assert.equal(RaceEngineer.stopCall(owed({ lapsLeft: 7.5 })), null, 'not yet');
+  const call = RaceEngineer.stopCall(owed({ lapsLeft: 5 }));
+  assert.equal(call?.reason, 'rule');
+  assert.notEqual(call?.tyres, 'medium', 'another kind');
+  assert.equal(call?.tyres, RaceEngineer.tyresFor(owed({ lapsLeft: 5 }), 5, 0));
+  // The plan says so before the stop, not "stay out to the end".
+  const e2 = new RaceEngineer();
+  const said = listen(e2, () => owed({ lapsLeft: 7 }), 60, 20);
+  assert.ok(said.some((s) => s.startsWith(E.plan.split('{')[0])), said.join(' | '));
+  assert.ok(!said.includes(E.manage));
+  // Met (two kinds, or wets): nothing.
+  assert.equal(RaceEngineer.stopCall(view({ rule: rule(['medium', 'hard']), lapsLeft: 5 }, { lapsLeft: 12 })), null);
+  assert.equal(RaceEngineer.stopCall(view({ rule: rule(['wet']), lapsLeft: 5 }, { compound: 'wet', lapsLeft: 12, wetness: 0.6 })), null);
+  // Too late.
+  const e3 = new RaceEngineer();
+  assert.equal(e3.update(owed({ lapsDone: 9, lapsLeft: 0.9 }))?.text, E.ruleMissed);
+});
+
+test('DRS enabled: said once', () => {
+  const eng = new RaceEngineer();
+  eng.update(view({ time: 50, drs: false }));
+  assert.equal(eng.update(view({ time: 60, drs: true }))?.text, E.drsOn);
+  assert.equal(eng.update(view({ time: 70, drs: true })), null);
+});

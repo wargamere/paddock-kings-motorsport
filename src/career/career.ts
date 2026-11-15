@@ -12,6 +12,9 @@ import { advanceToWeekend, announceRegulations, startEngineeringSeason, teamDeve
 import { CALENDAR_TRACKS } from './calendar.ts';
 import { areaPhysics, cleanCarAreas, cleanRivalPackages, seatAreas, type AreaRatings, type RivalPackage } from './carAreas.ts';
 import { seasonWeather } from './seasonWeather.ts';
+import { pointsFor, roundPoints, sprintPoints } from './points.ts';
+
+export { pointsFor, roundPoints, sprintPointsFor } from './points.ts';
 import { activateDriverContracts, cleanDriverContracts, driverContracts, settleDriverPayroll, type DriverContracts } from './contracts.ts';
 
 /**
@@ -25,12 +28,22 @@ import { activateDriverContracts, cleanDriverContracts, driverContracts, settleD
 /** The weather for a round (the same kinds as a single race's). */
 export type RoundWeather = 'dry' | 'rain' | 'changing';
 
+/** A sprint's classification: the winner first, the cars that retired last. */
+export interface SprintResult {
+  order: string[];
+  dnf: string[];
+}
+
 /** One finished round. */
 export interface RoundResult {
-  /** Everyone in the classification, the winner first; the cars that retired come last. */
+  /** Everyone in the classification, the winner first; the cars that retired come last, then any disqualified. */
   order: string[];
   /** Who retired (they score nothing). */
   dnf: string[];
+  /** Who was disqualified (they score nothing): the two-compound rule broken. */
+  dsq?: string[];
+  /** A sprint weekend's sprint. */
+  sprint?: SprintResult;
   /** Who set the race's fastest lap, and who started from pole (null: not known). */
   fastest: string | null;
   pole: string | null;
@@ -96,6 +109,8 @@ export interface CareerSave extends RosterSave {
   done: RoundResult[];
   /** After qualifying for the next round: the grid (driver ids, pole first). Null before it. */
   grid: string[] | null;
+  /** A sprint weekend's sprint, once run: its result, and who took pole in qualifying (the grid is now the sprint's result). */
+  sprint?: SprintResult & { pole: string | null };
   /** The tyres you last chose to start a race on. */
   tyres: Compound;
   history: SeasonRecord[];
@@ -279,18 +294,6 @@ export function tyreLife(laps: number, natural: number): number {
   return Math.max(natural, laps * CAREER.tyreShare);
 }
 
-/** Points for finishing `place` (1-based). */
-export function pointsFor(place: number): number {
-  return CAREER.points[place - 1] ?? 0;
-}
-
-/** Points driver `id` scored in a round (nothing for a retirement). */
-export function roundPoints(r: RoundResult, id: string): number {
-  if (r.dnf.includes(id)) return 0;
-  const i = r.order.indexOf(id);
-  return i < 0 ? 0 : pointsFor(i + 1);
-}
-
 /** Ahead on points; level, on the most wins, then the most 2nd places, and so on (countback). */
 function ahead(a: { points: number; places: number[] }, b: { points: number; places: number[] }): number {
   if (a.points !== b.points) return b.points - a.points;
@@ -306,11 +309,12 @@ export function driverStandings(save: CareerSave): DriverRow[] {
   const rows = lineup(save).map((e) => ({ ...e, points: 0, wins: 0, podiums: 0, dnfs: 0, poles: 0, fastest: 0, results: [] as number[], places: [] as number[] }));
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const round of save.done) {
+    for (const row of rows) row.points += sprintPoints(round, row.id);
     round.order.forEach((id, i) => {
       const row = byId.get(id);
       if (!row) return;
-      if (round.dnf.includes(id)) {
-        row.dnfs++;
+      if (round.dnf.includes(id) || round.dsq?.includes(id)) {
+        if (round.dnf.includes(id)) row.dnfs++;
         row.results.push(0);
         return;
       }
@@ -362,6 +366,40 @@ export function wholeOrder(save: CareerSave, order: readonly string[]): string[]
   return out;
 }
 
+/**
+ * Whether round `round` (0-based) of the season is a sprint weekend: about
+ * one in CAREER.sprintEvery, spread through the season, never the first or
+ * the last (none in a season of fewer than four rounds).
+ */
+export function sprintRound(save: Pick<CareerSave, 'calendar'>, round: number): boolean {
+  const n = save.calendar.length;
+  const count = Math.floor(n / CAREER.sprintEvery);
+  if (count < 1 || round <= 0 || round >= n - 1) return false;
+  for (let k = 0; k < count; k++) if (Math.min(n - 2, Math.max(1, Math.round(((k + 0.5) * n) / count))) === round) return true;
+  return false;
+}
+
+/** Laps in a sprint, for a Grand Prix of `laps`. */
+export function sprintLaps(laps: number): number {
+  return Math.max(CAREER.sprintMinLaps, Math.round(laps * CAREER.sprintShare));
+}
+
+/**
+ * The next round's sprint has been run: its classification is kept for the
+ * round (with qualifying's pole), and it is the Grand Prix's grid, the cars
+ * that retired at the back.
+ */
+export function recordSprint(save: CareerSave, result: { order: readonly string[]; dnf: readonly string[] }): SprintResult | null {
+  const round = nextRound(save);
+  if (round === null || !sprintRound(save, round) || !save.grid || save.sprint) return null;
+  const whole = wholeOrder(save, result.order);
+  const dnf = whole.filter((id) => result.dnf.includes(id));
+  const sprint: SprintResult = { order: [...whole.filter((id) => !dnf.includes(id)), ...dnf], dnf };
+  save.sprint = { ...sprint, pole: save.grid[0] ?? null };
+  save.grid = [...sprint.order];
+  return sprint;
+}
+
 /** Qualifying for the next round is done: the grid is kept until the race has been run. */
 export function setGrid(save: CareerSave, order: readonly string[]): void {
   save.calendarStarted = true;
@@ -373,19 +411,22 @@ export function setGrid(save: CareerSave, order: readonly string[]): void {
  * first), `dnf` who retired. The cars that retired go to the end of it (in
  * the order given), and the grid is used up.
  */
-export function recordRound(save: CareerSave, result: { order: readonly string[]; dnf: readonly string[]; fastest: string | null }): RoundResult | null {
+export function recordRound(save: CareerSave, result: { order: readonly string[]; dnf: readonly string[]; fastest: string | null; dsq?: readonly string[] }): RoundResult | null {
   if (nextRound(save) === null) return null;
   save.calendarStarted = true;
   if (save.owner) dynasty(save);
   ensureSeasonStart(save);
   if (save.owner?.engineering) advanceToWeekend(save, true);
   const whole = wholeOrder(save, result.order);
-  const dnf = whole.filter((id) => result.dnf.includes(id));
+  const dsq = whole.filter((id) => result.dsq?.includes(id));
+  const dnf = whole.filter((id) => result.dnf.includes(id) && !dsq.includes(id));
   const round: RoundResult = {
-    order: [...whole.filter((id) => !dnf.includes(id)), ...dnf],
+    order: [...whole.filter((id) => !dnf.includes(id) && !dsq.includes(id)), ...dnf, ...dsq],
     dnf,
+    ...(dsq.length ? { dsq } : {}),
+    ...(save.sprint ? { sprint: { order: save.sprint.order, dnf: save.sprint.dnf } } : {}),
     fastest: result.fastest && whole.includes(result.fastest) ? result.fastest : null,
-    pole: save.grid?.[0] ?? null,
+    pole: save.sprint ? save.sprint.pole : (save.grid?.[0] ?? null),
   };
   save.done.push(round);
   settleOwnerRound(save, round);
@@ -394,6 +435,7 @@ export function recordRound(save: CareerSave, result: { order: readonly string[]
   announceRegulations(save);
   settleSeasonAwards(save);
   save.grid = null;
+  delete save.sprint;
   return round;
 }
 
@@ -425,7 +467,7 @@ export function settleSeasonAwards(save: CareerSave): boolean {
 
 export function seasonReport(save: CareerSave): SeasonReport {
   const teams = teamStandings(save), mine = teams.find(t => t.yours)!, all = driverStandings(save), ids = new Set(mine.drivers.map(d => d.id));
-  const weekends = save.done.map((r, i) => ({ track: save.calendar[i], points: r.order.reduce((sum, id, place) => sum + (ids.has(id) && !r.dnf.includes(id) ? CAREER.points[place] ?? 0 : 0), 0) }));
+  const weekends = save.done.map((r, i) => ({ track: save.calendar[i], points: [...ids].reduce((sum, id) => sum + roundPoints(r, id), 0) }));
   const best = weekends.sort((a, b) => b.points - a.points)[0];
   return { teamName: mine.team.name, teamPoints: mine.points, teamWins: mine.wins, teamPodiums: mine.podiums, teamPosition: teams.indexOf(mine) + 1,
     target: save.owner?.target ?? carRank(save, save.team), prize: save.owner?.seasonPrize?.season === save.season ? save.owner.seasonPrize.amount : 0,
@@ -536,14 +578,30 @@ export function cleanCareer(raw: unknown): CareerSave | null {
   }
   const ids = new Set(lineup(save).map((e) => e.id));
   const one = (x: unknown) => (typeof x === 'string' && ids.has(x) ? x : null);
+  const cleanSprint = (x: unknown): SprintResult | null => {
+    if (!x || typeof x !== 'object') return null;
+    const o = x as Record<string, unknown>;
+    const dnf = strings(o.dnf).filter((id) => ids.has(id));
+    const order = wholeOrder(save, strings(o.order));
+    return { order: [...order.filter((id) => !dnf.includes(id)), ...dnf], dnf };
+  };
   for (const d of Array.isArray(r.done) ? r.done : []) {
     if (!d || typeof d !== 'object' || save.done.length >= save.calendar.length) continue;
     const o = d as Record<string, unknown>;
     const order = wholeOrder(save, strings(o.order));
-    save.done.push({ order, dnf: strings(o.dnf).filter((id) => ids.has(id)), fastest: one(o.fastest), pole: one(o.pole) });
+    const round: RoundResult = { order, dnf: strings(o.dnf).filter((id) => ids.has(id)), fastest: one(o.fastest), pole: one(o.pole) };
+    const dsq = strings(o.dsq).filter((id) => ids.has(id) && !round.dnf.includes(id));
+    if (dsq.length) round.dsq = dsq;
+    const sprint = cleanSprint(o.sprint);
+    if (sprint) round.sprint = sprint;
+    save.done.push(round);
   }
   const grid = strings(r.grid);
   if (grid.length && nextRound(save) !== null) save.grid = wholeOrder(save, grid);
+  // (A sprint already run this weekend: only with its grid, on a sprint weekend.)
+  const sprint = cleanSprint(r.sprint);
+  const next = nextRound(save);
+  if (sprint && save.grid && next !== null && sprintRound(save, next)) save.sprint = { ...sprint, pole: one((r.sprint as Record<string, unknown>).pole) };
   if (r.customCalendar === true) save.customCalendar = true;
   if (r.calendarStarted === true || save.done.length || save.grid || (save.owner?.engineering?.practice.key.startsWith(`${save.season}:`) && save.owner.engineering.practice.laps > 0)) save.calendarStarted = true;
   for (const h of Array.isArray(r.history) ? r.history.slice(-200) : []) {

@@ -1,5 +1,5 @@
 import { HANDLING } from '../config/handling.ts';
-import { DAMAGE, DEFAULT_SETUP, SETUP, TYRES, type CarSetup, type Compound } from '../config/race.ts';
+import { DAMAGE, DEFAULT_SETUP, DRS, ERS, SETUP, TYRES, type CarSetup, type Compound } from '../config/race.ts';
 import { clamp } from '../core/math.ts';
 import { locatorFor, type TrackLocator } from '../track/locator.ts';
 import { pitLayout } from '../track/pits.ts';
@@ -26,6 +26,8 @@ export interface DriveInput {
   handbrake: boolean;
   /** A gear change asked for this tick (manual gearbox): +1 up, -1 down. */
   shift?: number;
+  /** The overtake boost held (it works while the battery has charge, on the throttle). */
+  boost?: boolean;
 }
 
 export const NO_INPUT: Readonly<DriveInput> = { throttle: 0, brake: 0, steer: 0, handbrake: false };
@@ -177,6 +179,11 @@ export class CarPhysics {
   readonly prev = new CarState();
   /** How much of the slipstream of a car ahead this car is in, 0..1 (set before each step; see slipstream.ts). */
   draft = 0;
+  /** DRS open this tick (set before each step by the race: see race/drs.ts): less drag, a higher top speed. */
+  drs = false;
+  /** The overtake boost's battery, 0..1 (see ERS), and whether it was boosting on the last tick. */
+  ers = 1;
+  boosting = false;
   /** Who changes gear (see gearbox.ts): AI cars and the medal bot shift perfectly; the player shifts by hand or with the automatic. */
   gearbox: GearboxMode = 'ideal';
   /**
@@ -194,6 +201,8 @@ export class CarPhysics {
   /** Laps driven on these tyres, and the share of their life used (sliding uses it faster; 1 = they've gone off). */
   tyreAge = 0;
   tyreUse = 0;
+  /** The kinds of tyre this car has run this race, in order (for the two-compound rule). */
+  tyresUsed: Compound[] = [];
   /** Wing, gears and brake balance (see SETUP); the default is the car as it always was. */
   setup: CarSetup = DEFAULT_SETUP;
   /** Damage (Conditions → Damage) on, and how damaged the front wing and the bodywork are (0..1). */
@@ -317,8 +326,10 @@ export class CarPhysics {
     this.bodyDamage = 0;
   }
 
-  /** A fresh set of tyres (a pit stop, or a new run), of `compound` (the same kind by default). */
-  newTyres(compound: Compound = this.compound): void {
+  /** A fresh set of tyres (a pit stop, or with `first` the start of a run), of `compound` (the same kind by default). */
+  newTyres(compound: Compound = this.compound, first = false): void {
+    if (first) this.tyresUsed = [];
+    if (!this.tyresUsed.includes(compound)) this.tyresUsed.push(compound);
     this.compound = compound;
     this.tyreAge = 0;
     this.tyreUse = 0;
@@ -402,12 +413,20 @@ export class CarPhysics {
     // In another car's slipstream the air resistance drops and the tow pulls the car along,
     // past its usual top speed: enough to draw alongside on a straight.
     const tow = this.draft;
-    let resist = H.rollingDrag + surfDrag + H.aeroDrag * wing.drag * (1 + DAMAGE.bodyDrag * this.bodyDamage) * (1 - H.slipstreamDragCut * tow) * vf * vf;
+    // DRS open: the rear wing's flap cuts the drag. The boost: more push, and a little more top speed.
+    const flap = this.drs ? DRS.dragCut : 0;
+    const boost = !!inp.boost && this.ers > 0 && throttle > 0 && vf > 2;
+    this.boosting = boost;
+    let resist = H.rollingDrag + surfDrag + H.aeroDrag * wing.drag * (1 + DAMAGE.bodyDrag * this.bodyDamage) * (1 - H.slipstreamDragCut * tow) * (1 - flap) * vf * vf;
     if (throttle > 0) {
-      const fade = Math.max(0, 1 - vf / (H.maxSpeed * this.tune.top * gears.top * speedF * (1 + H.slipstreamTopSpeed * tow)));
-      if (vf >= -0.5) drive += (H.engineAccel * this.tune.pull * accelF * pull + H.slipstreamPush * tow) * throttle * fade;
+      const extra = H.slipstreamTopSpeed * tow + (this.drs ? DRS.top : 0) + (boost ? ERS.top : 0);
+      const fade = Math.max(0, 1 - vf / (H.maxSpeed * this.tune.top * gears.top * speedF * (1 + extra)));
+      if (vf >= -0.5) drive += (H.engineAccel * this.tune.pull * accelF * pull + H.slipstreamPush * tow + (boost ? ERS.push : 0)) * throttle * fade;
       else resist += brakeDecel * throttle;
     }
+    // The battery: the boost uses it, braking charges it.
+    if (boost) this.ers = Math.max(0, this.ers - ERS.drain * dt);
+    else if (brake > 0 && vf > 8) this.ers = Math.min(1, this.ers + ERS.harvest * brake * dt);
     if (brake > 0) {
       if (vf > 0.5) resist += brakeDecel * brake;
       else if (throttle === 0 && vf > -H.reverseMaxSpeed) drive -= H.reverseAccel * accelF * brake;

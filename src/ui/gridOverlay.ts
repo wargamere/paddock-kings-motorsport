@@ -9,6 +9,8 @@ export interface GridEntry {
   /** Best clean qualifying lap, or null for no time. */
   time: number | null;
   you: boolean;
+  /** Knocked out in this session (knockout qualifying). */
+  out?: boolean;
 }
 
 /**
@@ -17,6 +19,8 @@ export interface GridEntry {
  */
 export class GridOverlay {
   readonly root: HTMLElement;
+  private readonly title: HTMLElement;
+  private readonly startBtn: HTMLButtonElement;
   private readonly note: HTMLElement;
   private readonly list: HTMLElement;
   private abort: AbortController | null = null;
@@ -28,31 +32,36 @@ export class GridOverlay {
     this.note = h('p', { class: 'grid-note' });
     this.list = h('ol', { class: 'standings' });
     this.back = button(STR.buttons.raceSettings, () => this.actions.settings(), { icon: '🏁' });
+    this.title = h('h2', { text: STR.grid.title });
+    this.startBtn = button(STR.grid.start, () => this.actions.start(), { icon: '▶', class: 'primary', key: 'Enter' });
     this.root = h(
       'div',
       { class: 'screen overlay grid-overlay' },
       h(
         'div',
         { class: 'panel' },
-        h('h2', { text: STR.grid.title }),
+        this.title,
         this.note,
         this.list,
-        h(
-          'div',
-          { class: 'menu row setup-buttons' },
-          this.back,
-          button(STR.grid.start, () => this.actions.start(), { icon: '▶', class: 'primary', key: 'Enter' }),
-        ),
+        h('div', { class: 'menu row setup-buttons' }, this.back, this.startBtn),
       ),
     );
     this.root.hidden = true;
   }
 
-  show(entries: readonly GridEntry[]): void {
+  /**
+   * The grid (or with `session`, a knockout session's classification: its
+   * title, what it means for you, and the button to the next session).
+   */
+  show(entries: readonly GridEntry[], session?: { title: string; note: string; next: string }): void {
     const ord = (i: number) => STR.results.ordinals[i] ?? String(i + 1);
     const pole = entries[0]?.time ?? null;
     const you = entries.findIndex((e) => e.you);
-    this.note.textContent = fmt(STR.grid.youStart, { pos: ord(you), n: entries.length });
+    this.title.textContent = session?.title ?? STR.grid.title;
+    this.note.textContent = session?.note ?? fmt(STR.grid.youStart, { pos: ord(you), n: entries.length });
+    const label = this.startBtn.querySelector('.btn-label');
+    if (label) label.textContent = session?.next ?? STR.grid.start;
+    this.root.classList.toggle('session', !!session);
     this.list.replaceChildren(
       ...entries.map((e, i) => {
         const dot = h('i', { class: 'car-dot' });
@@ -60,10 +69,11 @@ export class GridOverlay {
         const time = e.time === null ? STR.grid.noTime : i === 0 || pole === null ? formatTime(e.time) : fmt(STR.results.gap, { t: (e.time - pole).toFixed(2) });
         return h(
           'li',
-          { class: e.you ? 'you' : '' },
+          { class: `${e.you ? 'you' : ''}${e.out ? ' out' : ''}`.trim() },
           h('span', { class: 'standing-pos', text: ord(i) }),
           dot,
           h('span', { class: 'standing-name', text: e.name }),
+          e.out ? h('span', { class: 'standing-out', text: STR.grid.outTag }) : null,
           h('span', { class: 'standing-time', text: time }),
         );
       }),

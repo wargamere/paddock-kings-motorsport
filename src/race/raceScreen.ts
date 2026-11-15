@@ -10,7 +10,7 @@ import { currentPaintHex, recordFinishedRun } from '../car/paint.ts';
 import { CarPhysics, CarState, lerpState, NO_INPUT, STANDARD_CAR, type DriveInput } from '../car/physics.ts';
 import { HANDLING } from '../config/handling.ts';
 import { AI_PAINTS, PAINTS } from '../config/paint.ts';
-import { AI, CONDITIONS, DAMAGE, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, DRS, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
 import { compoundLife } from '../car/tyres.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { FixedStep } from '../core/fixedStep.ts';
@@ -34,6 +34,10 @@ import { Hud } from '../ui/hud.ts';
 import { PauseMenu } from '../ui/pauseMenu.ts';
 import { TouchControls } from '../ui/touchControls.ts';
 import { GridOverlay, type GridEntry } from '../ui/gridOverlay.ts';
+import { knockoutGrid, knockoutOut, knockoutSession, trackEvolution } from './knockout.ts';
+import { DrsControl } from './drs.ts';
+import { RaceEffects } from '../render/effects.ts';
+import { carEffects } from '../render/carEffects.ts';
 import { AiDriver, aiField, aiPace, gridOrder, gridPlace, qualifyingOrder, YOU } from './ai.ts';
 import { RacingDriver } from './driver.ts';
 import { raceOrder } from './classify.ts';
@@ -43,7 +47,7 @@ import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
 import { applyAssists, assistDriver } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
-import { pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
+import { compoundsMet, pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
 import { RaceEngineer, type EngineerCar, type EngineerView } from './engineer.ts';
 import { Radio } from '../ui/radio.ts';
 import { REPLAY } from '../config/replay.ts';
@@ -146,6 +150,11 @@ export class RaceScreen implements Screen {
   private readonly aiEvents: RaceEvent[] = [];
   /** Slipstream for each car in `states` this tick. */
   private readonly drafts = new Float32Array(AI.maxField + 1);
+  /** Smoke, sparks and bits of car (null without WebGL); each car's hardest hit since the last frame. */
+  private readonly fx: RaceEffects | null;
+  private readonly fxHits = new Float32Array(AI.maxField + 1);
+  /** DRS in a race with AI cars (and with it the overtake boost): who may open the flap where. */
+  private drs: DrsControl | null = null;
   /** Your race engineer (in a race), and the radio you hear them on. */
   private engineer: RaceEngineer | null = null;
   private readonly radio = new Radio();
@@ -172,6 +181,18 @@ export class RaceScreen implements Screen {
   private grid: number[] = [YOU];
   /** The AI cars' qualifying laps, simulated a slice at a time while you qualify. */
   private qualSims: AuthorLap[] = [];
+  /**
+   * Knockout qualifying (a championship round): the session being driven
+   * (1–3), each finished session's result, the cars still in, each AI car's
+   * simulated lap (Q1's, the base for the later sessions), each car's time in
+   * the last session it was in, and the session to go to from the overlay.
+   */
+  private qPart: 1 | 2 | 3 = 1;
+  private qSessions: { order: number[]; out: number[] }[] = [];
+  private qIn: number[] = [];
+  private readonly qBase = new Map<number, number | null>();
+  private readonly qBest = new Map<number, number | null>();
+  private qNext: 2 | 3 | null = null;
   /** Where the player started (m along the track). */
   private playerStart = -8;
   private readonly gridOverlay: GridOverlay;
@@ -259,7 +280,7 @@ export class RaceScreen implements Screen {
       paddock: () => this.leaveEvent(),
     });
     this.gridOverlay = new GridOverlay({
-      start: () => this.startRace(this.grid),
+      start: () => (this.qNext ? this.startQualifying(this.qNext) : this.startRace(this.grid)),
       settings: () => (this.game.event ? this.game.event.leave() : this.game.openSetup()),
     });
     this.watchBar = h('div', { class: 'watch-bar' }, h('span', { class: 'watch-text', text: STR.race.watching }), button(STR.race.watchSkip, () => this.endWatching(), { icon: '⏭', class: 'compact', key: 'Enter' }));
@@ -269,6 +290,7 @@ export class RaceScreen implements Screen {
     this.model = game.view3d ? new CarModel(currentPaintHex()) : null;
     this.ghostModel = game.view3d ? new CarModel(currentPaintHex(), RACE.ghostOpacity) : null;
     this.scModel = game.view3d ? new CarModel(0xf4f4f0) : null;
+    this.fx = game.view3d ? new RaceEffects(game.view3d.scene) : null;
     if (this.scModel) {
       this.scModel.root.visible = false;
       game.view3d?.scene.add(this.scModel.root);
@@ -360,6 +382,7 @@ export class RaceScreen implements Screen {
   }
 
   exit(): void {
+    this.fx?.clear();
     this.input.detach();
     this.touch.release();
     this.abort?.abort();
@@ -480,9 +503,9 @@ export class RaceScreen implements Screen {
     else ev.leave();
   }
 
-  /** Restart from the pause menu: qualifying again, or the same race from the same grid. */
+  /** Restart from the pause menu: qualifying again (this session, in knockout qualifying), or the same race from the same grid. */
   private restart(): void {
-    if (this.stage === 'qualifying') this.startQualifying();
+    if (this.stage === 'qualifying') this.startQualifying(this.qPart);
     else if (this.game.mode === 'race' && this.grid.length > 1) this.startRace(this.grid);
     else this.startRun();
   }
@@ -490,6 +513,8 @@ export class RaceScreen implements Screen {
   /** What every new run (or qualifying session) resets. */
   private resetRun(): void {
     const def = this.game.track.def;
+    this.fx?.clear();
+    this.fxHits.fill(0);
     this.applyPaint();
     if (CAPS.links) writeHashCode(encodeTrack(def.name, def.control, def.options, def.extras));
     const rec = this.game.records.get(def.id);
@@ -534,7 +559,7 @@ export class RaceScreen implements Screen {
     this.damageWarned = 0;
     car.setup = settings().carSetup;
     car.mediumLife = this.game.event?.tyreLife ?? trackTyreLife(this.game.track);
-    car.newTyres(wear ? this.game.setup.tyres : 'medium');
+    car.newTyres(wear ? this.game.setup.tyres : 'medium', true);
     // (A pit crew for new tyres, or for repairs.)
     this.crew = wear || damage ? new PitCrew(this.game.track, this.myBox) : null;
     this.crew?.reset(car.state);
@@ -575,6 +600,11 @@ export class RaceScreen implements Screen {
     }
     this.prepareCar(car, setup.tyreWear, setup.damage);
     this.control = setup.mode === 'race' ? new RaceControl(t.center.length, setup.laps, setup.safetyCar) : null;
+    // DRS and the boost: in a race with AI cars. (Every car starts with a full battery.)
+    this.drs = setup.mode === 'race' && this.opponents.length ? new DrsControl(t, 1 + this.opponents.length) : null;
+    car.ers = 1;
+    car.drs = false;
+    this.touch.setBoost(!!this.drs);
     this.hits = [];
     if (this.scModel) this.scModel.root.visible = false;
     this.hud.setFlag(null);
@@ -600,10 +630,17 @@ export class RaceScreen implements Screen {
    * Qualifying: you alone on the track for a few timed laps, no countdown.
    * The AI cars' flying laps are simulated in the background at their own pace.
    */
-  private startQualifying(): void {
+  private startQualifying(part: 1 | 2 | 3 = 1): void {
     const car = this.car;
     if (!car) return;
     this.stage = 'qualifying';
+    this.qPart = part;
+    this.qNext = null;
+    if (part === 1) {
+      this.qSessions = [];
+      this.qBase.clear();
+      this.qBest.clear();
+    }
     this.resetRun();
     this.clearOpponents();
     const setup = this.game.setup;
@@ -618,24 +655,100 @@ export class RaceScreen implements Screen {
     this.gaps = null;
     this.tower.hide();
     this.syncLive();
-    this.qualSims = this.field(setup.opponents).map((f) => new AuthorLap(t, f.difficulty, false, this.wet, suggestedSetup(t), f.tune));
+    // (The AI cars' laps are simulated once, in Q1: the later sessions build on them.)
+    this.qualSims = part === 1 ? this.field(setup.opponents).map((f) => new AuthorLap(t, f.difficulty, false, this.wet, suggestedSetup(t), f.tune)) : [];
     this.hud.setMode('race');
     this.pauseMenu.setMode('qualifying');
     this.rig.snap(car.state);
-    this.hud.flash(fmt(STR.race.qualifyingGo, { n: AI.qualifyingLaps }), 'info', 3);
+    const R = STR.race, n = AI.qualifyingLaps;
+    const go = !this.knockout ? fmt(R.qualifyingGo, { n }) : part === 3 ? fmt(R.knockoutFinal, { n }) : fmt(R.knockoutGo, { part, n, out: knockoutOut(this.fieldSize) });
+    this.hud.flash(go, 'info', 3);
   }
 
-  /** Qualifying is over (or skipped): the grid from everyone's best lap, and Start race. */
+  /** The two-compound rule is in force: a championship's Grand Prix, with tyre wear. */
+  private get twoCompounds(): boolean {
+    return !!this.game.event?.twoCompounds && this.game.setup.tyreWear;
+  }
+
+  /** Cars in qualifying, you included. */
+  private get fieldSize(): number {
+    return 1 + this.field(this.game.setup.opponents).length;
+  }
+
+  /** Knockout qualifying: a championship round with a big enough field. */
+  private get knockout(): boolean {
+    return !!this.game.event && knockoutOut(this.fieldSize) > 0;
+  }
+
+  /** An AI car's lap in knockout session `part`: its simulated lap, a little different each time, on a track that's quicker as it rubbers in. */
+  private knockoutLap(k: number, part: 1 | 2 | 3): number | null {
+    const base = this.qBase.get(k) ?? null;
+    return base === null ? null : base * (1 + (Math.random() * 2 - 1) * AI.qualifyingNoise) * trackEvolution(part);
+  }
+
+  /**
+   * A knockout session is over (driven, or skipped: then you've no time in
+   * it). Out, or after Q3: the rest is run without you and the grid is set;
+   * through: its classification, and on to the next session.
+   */
+  private endKnockoutSession(field: FieldCar[]): void {
+    const part = this.qPart;
+    const ins = part === 1 ? [YOU, ...field.map((_, k) => k)] : this.qIn;
+    const times = new Map<number, number | null>(ins.map((k) => [k, k === YOU ? (this.session?.bestOfRun() ?? null) : this.knockoutLap(k, part)]));
+    let res = knockoutSession(times, part, this.fieldSize);
+    this.qSessions.push(res);
+    for (const [k, t] of times) this.qBest.set(k, t);
+    const entry = (k: number, out: boolean): GridEntry =>
+      k === YOU ? { name: this.myName, paint: this.myPaint, time: times.get(YOU) ?? null, you: true, out } : { name: field[k].name, paint: field[k].paint, time: times.get(k) ?? null, you: false, out };
+    if (part < 3 && !res.out.includes(YOU)) {
+      // Through: the classification, and on to the next session.
+      this.qIn = res.through;
+      this.qNext = (part + 1) as 2 | 3;
+      this.stage = 'grid';
+      this.qualSims = [];
+      this.paused = false;
+      this.pauseMenu.hide();
+      this.hud.clearFlash();
+      audio.setEngine(false);
+      const G = STR.grid;
+      const pos = STR.results.ordinals[res.order.indexOf(YOU)] ?? '';
+      this.gridOverlay.show(
+        res.order.map((k) => entry(k, res.out.includes(k))),
+        { title: fmt(G.session, { n: part }), note: fmt(G.through, { next: part + 1, pos, out: res.out.length }), next: fmt(G.next, { n: part + 1 }) },
+      );
+      return;
+    }
+    // You're out (or Q3 is done): the sessions you're not in, without you.
+    for (let p = part + 1; p <= 3; p++) {
+      const q = p as 2 | 3;
+      const t = new Map<number, number | null>(res.through.map((k) => [k, this.knockoutLap(k, q)]));
+      res = knockoutSession(t, q, this.fieldSize);
+      this.qSessions.push(res);
+      for (const [k, x] of t) this.qBest.set(k, x);
+    }
+    this.qNext = null;
+    this.setGridFrom(knockoutGrid(this.qSessions), this.qBest, field, part === 3 ? null : part);
+  }
+
+  /** Qualifying (or a knockout session) is over, or skipped: the grid from everyone's best lap, and Start race; or on to the next session. */
   private showGrid(): void {
     if (this.stage !== 'qualifying') return;
-    for (const sim of this.qualSims) sim.finish();
-    const field = this.field(this.qualSims.length);
+    const field = this.field(this.game.setup.opponents);
+    if (this.qPart === 1) {
+      for (const sim of this.qualSims) sim.finish();
+      this.qualSims.forEach((sim, k) => this.qBase.set(k, sim.result ?? null));
+    }
+    if (this.knockout) {
+      this.endKnockoutSession(field);
+      return;
+    }
     const times = new Map<number, number | null>([[YOU, this.session?.bestOfRun() ?? null]]);
-    this.qualSims.forEach((sim, k) => {
-      const lap = sim.result ?? null;
-      times.set(k, lap === null ? null : lap * (1 + (Math.random() * 2 - 1) * AI.qualifyingNoise));
-    });
-    const order = qualifyingOrder(times);
+    this.qualSims.forEach((_, k) => times.set(k, this.knockoutLap(k, 1)));
+    this.setGridFrom(qualifyingOrder(times), times, field, null);
+  }
+
+  /** The grid is set (from `times`): on show, with Start race; a championship keeps it. `outIn`: the knockout session you went out in. */
+  private setGridFrom(order: number[], times: ReadonlyMap<number, number | null>, field: FieldCar[], outIn: 1 | 2 | null): void {
     this.grid = order;
     this.stage = 'grid';
     this.qualSims = [];
@@ -655,7 +768,8 @@ export class RaceScreen implements Screen {
       const idOf = (k: number) => (k === YOU ? ev.you.id : (field[k].id ?? String(k)));
       ev.qualified(order.map(idOf), Object.fromEntries(order.map((k) => [idOf(k), times.get(k) ?? null])));
     }
-    this.gridOverlay.show(entries);
+    const you = order.indexOf(YOU);
+    this.gridOverlay.show(entries, outIn ? { title: STR.grid.title, note: fmt(STR.grid.knockedOut, { n: outIn, pos: STR.results.ordinals[you] ?? '', total: order.length }), next: STR.grid.start } : undefined);
   }
 
   /** Qualifying shares the frame's small background-work deadline with medal timing. */
@@ -686,7 +800,7 @@ export class RaceScreen implements Screen {
     const field = this.field(order.length - 1);
     const laps = this.game.setup.laps;
     field.forEach((f, k) => {
-      const ai = new AiDriver(t, { name: f.name, paint: f.paint, difficulty: f.difficulty, tune: f.tune, laps, slot: order.indexOf(k), box: f.box ?? k + 1, wet: this.wet, tyreWear: this.game.setup.tyreWear, damage: this.game.setup.damage, mediumLife: this.game.event?.tyreLife });
+      const ai = new AiDriver(t, { name: f.name, paint: f.paint, difficulty: f.difficulty, tune: f.tune, laps, slot: order.indexOf(k), box: f.box ?? k + 1, wet: this.wet, tyreWear: this.game.setup.tyreWear, damage: this.game.setup.damage, mediumLife: this.game.event?.tyreLife, twoCompounds: this.twoCompounds, ers: this.game.setup.mode === 'race' });
       const model = this.aiModels[k];
       model.setPaint(f.paint, f.secondary);
       model.root.visible = true;
@@ -723,6 +837,7 @@ export class RaceScreen implements Screen {
   private takeOff(idx: number): void {
     if (this.gone[idx]) return;
     this.gone[idx] = true;
+    this.drs?.forget(idx);
     const o = idx > 0 ? this.opponents[idx - 1] : null;
     if (o) {
       o.model.root.visible = false;
@@ -746,10 +861,11 @@ export class RaceScreen implements Screen {
   private controlsText(): string {
     const d = this.input.lastDevice;
     const manual = settings().assists.gears === 'manual';
-    if (d === 'touch') return STR.race.hintTouch + (manual ? STR.race.hintGearsTouch : '');
+    const boost = !!this.drs;
+    if (d === 'touch') return STR.race.hintTouch + (manual ? STR.race.hintGearsTouch : '') + (boost ? STR.race.hintBoostTouch : '');
     const practice = this.game.mode === 'practice';
-    if (d === 'gamepad') return STR.race.hintGamepad + (manual ? STR.race.hintGearsGamepad : '') + (practice ? STR.race.hintRestartGamepad : '');
-    return keyboardHint(settings().keys, { manual, practice, tower: this.opponents.length > 0 });
+    if (d === 'gamepad') return STR.race.hintGamepad + (manual ? STR.race.hintGearsGamepad : '') + (boost ? STR.race.hintBoostGamepad : '') + (practice ? STR.race.hintRestartGamepad : '');
+    return keyboardHint(settings().keys, { manual, practice, tower: this.opponents.length > 0, boost });
   }
 
   private onAction(a: InputAction): void {
@@ -799,6 +915,7 @@ export class RaceScreen implements Screen {
       this.hud.clearFlash();
     }
     this.car.resetToRoad();
+    this.drs?.forget(0);
     this.crew?.reset(this.car.state); // (a stop under way is off)
     this.hud.showTyrePicker(null);
     this.rig.snap(this.car.state);
@@ -862,6 +979,10 @@ export class RaceScreen implements Screen {
     if (car.state.inPits && car.state.speed > P.limit) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, car.state.speed > P.limit + 2 ? 0.5 : 0) };
     // In the pit box the crew holds the car while it works.
     if (this.crew?.busy) inp = HOLD;
+    // DRS: enabled from the second lap, in the dry, without the safety car; open where you're cleared, at full throttle.
+    const drs = this.drs;
+    if (drs) drs.enabled = this.drsEnabled();
+    car.drs = this.drsOpen(0, car, inp);
     const prev = this.progress();
     const hits = this.hits;
     hits.length = 1 + this.opponents.length;
@@ -875,7 +996,9 @@ export class RaceScreen implements Screen {
     this.opponents.forEach((o, k) => {
       if (this.gone[k + 1]) return;
       this.progress(o.ai.car, o.prev);
-      o.ai.car.step(o.ai.drive(st, dt));
+      const ai = o.ai.drive(st, dt);
+      o.ai.car.drs = this.drsOpen(k + 1, o.ai.car, ai);
+      o.ai.car.step(ai);
       hits[k + 1] = o.ai.car.state.wallHit;
     });
     // Cars bump into each other. A few times over, so a car pushed out of one car and into
@@ -895,6 +1018,8 @@ export class RaceScreen implements Screen {
         }
       }
     }
+    // (The hardest hit of each car until the next frame: sparks, and bits of car.)
+    for (let i = 0; i < hits.length; i++) if (hits[i] > this.fxHits[i]) this.fxHits[i] = hits[i];
     this.events.length = 0;
     // (Your session's clock is the race's: it keeps running when your own race is over.)
     session.step(prev, this.progress(), this.events);
@@ -904,6 +1029,11 @@ export class RaceScreen implements Screen {
       this.aiEvents.length = 0;
       o.ai.session.step(o.prev, this.progress(o.ai.car), this.aiEvents);
     });
+    // DRS: who crossed a detection point within a second of the car before.
+    if (drs) {
+      const now = session.time();
+      live.forEach((idx, i) => drs.update(idx, st[i].s, now));
+    }
     this.retirements(dt);
     this.chequeredFlag();
     if (this.control) this.raceControl(dt);
@@ -985,6 +1115,20 @@ export class RaceScreen implements Screen {
     for (const o of this.opponents) o.ai.session.flagged = true;
     // (Lapped: this lap is your last.)
     if (s.phase === 'racing' && s.laps.length < s.lapsToRun - 1) this.hud.flash(STR.race.flagOut, 'info', 3);
+  }
+
+  /** DRS is enabled: the race is on, the leader is on the second lap (DRS.fromLap), the road is dry enough, no safety car. */
+  private drsEnabled(): boolean {
+    const s = this.session!;
+    if (s.phase !== 'racing' || this.stage !== 'run') return false;
+    let laps = s.laps.length;
+    for (const o of this.opponents) laps = Math.max(laps, o.ai.session.laps.length);
+    return laps >= DRS.fromLap - 1 && (!this.control || this.control.sc === 'none') && this.weather.lineWet < DRS.wetFrom;
+  }
+
+  /** Car `idx` (0 = you) opens its DRS flap: cleared for the zone it's in, at full throttle, off the brakes, out of the pit lane. */
+  private drsOpen(idx: number, car: CarPhysics, inp: DriveInput): boolean {
+    return !!this.drs && !car.state.inPits && inp.throttle >= 0.9 && inp.brake === 0 && this.drs.available(idx, car.state.s);
   }
 
   /** Car `i` of `states` (0 = you). */
@@ -1248,9 +1392,13 @@ export class RaceScreen implements Screen {
       const rows = order.standings;
       const clean = rows.filter((r) => r.best !== null && r.best !== undefined);
       const fastest = clean.length ? clean.reduce((a, b) => ((b.best as number) < (a.best as number) ? b : a)) : null;
+      // The two-compound rule: a car that finished on one kind of dry tyre is disqualified.
+      const tyresOf = (id: string | undefined) => (id === ev.you.id ? this.car!.tyresUsed : this.opponents.find((o) => o.id === id)?.ai.car.tyresUsed) ?? [];
+      const dsq = this.twoCompounds ? rows.filter((r) => !r.dnf && !r.estimated && !compoundsMet(tyresOf(r.id))).map((r) => r.id ?? '') : [];
       ev.finished({
         order: rows.map((r) => r.id ?? ''),
         dnf: rows.filter((r) => r.dnf).map((r) => r.id ?? ''),
+        ...(dsq.length ? { dsq } : {}),
         fastest: fastest?.id ?? null,
         times: rows.map((r) => (r.dnf || r.estimated ? null : r.time)),
         laps: rows.map((r) => r.laps ?? 0),
@@ -1514,6 +1662,8 @@ export class RaceScreen implements Screen {
       forecast: this.weather?.forecast() ?? null,
       safetyCar: this.control?.sc ?? 'none',
       safetyCarCount: this.control?.scCount ?? 0,
+      rule: this.twoCompounds ? { used: car.tyresUsed } : null,
+      drs: !!this.drs?.enabled,
     };
   }
 
@@ -1553,7 +1703,7 @@ export class RaceScreen implements Screen {
     const rec = this.game.records.get(this.game.track.def.id);
     this.hud.setMedals(rec.author ? medalTimes(rec.author) : null, rec.best?.time ?? null);
     if (this.stage !== 'run') {
-      this.hud.setLap(s.lapStart === null ? STR.race.qualifying : fmt(STR.race.qualifyingLap, { n: Math.min(s.laps.length + 1, s.lapsToRun), total: s.lapsToRun }));
+      this.hud.setLap(s.lapStart === null ? (this.knockout ? `Q${this.qPart}` : STR.race.qualifying) : fmt(this.knockout ? STR.race.knockoutLap : STR.race.qualifyingLap, { part: this.qPart, n: Math.min(s.laps.length + 1, s.lapsToRun), total: s.lapsToRun }));
     } else if (this.game.mode === 'practice') {
       this.hud.setLap(s.lapStart === null ? STR.race.practice : fmt(STR.race.practiceLap, { n: s.laps.length + 1 }));
     } else if (s.lapStart === null && !this.opponents.length) this.hud.setLap(s.phase === 'countdown' ? '' : STR.race.warmup);
@@ -1674,6 +1824,17 @@ export class RaceScreen implements Screen {
       lerpState(o.ai.car.prev, o.ai.car.state, alpha, o.view);
       o.model.update(o.view, raced);
     });
+    // Damage you can see, smoke, sparks and bits of car.
+    const fx = this.fx;
+    if (fx) {
+      const fdt = this.paused ? 0 : dt;
+      if (fdt > 0) {
+        if (!this.gone[0]) carEffects(fx, this.view, car, this.model, this.myPaint, this.fxHits[0], fdt);
+        this.opponents.forEach((o, k) => !this.gone[k + 1] && carEffects(fx, o.view, o.ai.car, o.model, o.ai.paint, this.fxHits[k + 1], fdt));
+        this.fxHits.fill(0);
+      }
+      fx.update(fdt, v.renderer.domElement.height / (2 * Math.tan((v.camera.fov * Math.PI) / 360)), v.camera.position);
+    }
     // What the camera, the minimap and the speedometer follow: your car, or the one being watched.
     const focus = (this.watching ? this.watched()?.view : null) ?? this.view;
     if (!this.paused && !this.watching) {
@@ -1723,6 +1884,7 @@ export class RaceScreen implements Screen {
     this.touch.setManualGears(assists.gears === 'manual');
     this.updateLine(this.watching ? 'off' : assists.line);
     this.hud.setSlipstream(car.draft, SLIPSTREAM.show);
+    this.hud.setPower(this.drs && !this.watching && this.stage === 'run' ? { drs: car.drs ? 'open' : this.drs.armed(0) ? 'armed' : 'off', battery: car.ers, boosting: car.boosting } : null);
     this.showWeather(v);
     this.towerIn -= dt;
     if (this.towerIn <= 0) {

@@ -36,6 +36,13 @@ export class Hud {
   private readonly medals: HTMLElement;
   private readonly pos: HTMLElement;
   private readonly draft: HTMLElement;
+  /** DRS and the overtake boost's battery (a race with them). */
+  private readonly power: HTMLElement;
+  private readonly drsChip: HTMLElement;
+  private readonly ersFill: HTMLElement;
+  private drsState = '';
+  private ersPct = '';
+  private ersOn = false;
   private draftOn = false;
   private readonly posValue: HTMLElement;
   private medalKey = '';
@@ -113,6 +120,10 @@ export class Hud {
     this.flag.setAttribute('role', 'status');
     this.damage = h('div', { class: 'hud-damage' });
     this.damage.hidden = true;
+    this.drsChip = h('span', { class: 'drs-chip', text: STR.race.drs, title: STR.race.drsTitle });
+    this.ersFill = h('div', { class: 'ers-fill' });
+    this.power = h('div', { class: 'hud-power' }, this.drsChip, h('span', { class: 'ers-label', text: STR.race.boost, title: STR.race.boostTitle }), h('div', { class: 'ers-bar' }, this.ersFill));
+    this.power.hidden = true;
     const speed = h(
       'div',
       { class: 'hud-speed' },
@@ -120,6 +131,7 @@ export class Hud {
       h('div', { class: 'speed-main' }, this.speedValue, this.speedUnit),
       this.revBar,
       this.tyres,
+      this.power,
       this.damage,
     );
     this.draft = h('div', { class: 'hud-draft', text: STR.race.slipstream });
@@ -305,6 +317,28 @@ export class Hud {
     }
   }
   private draftPct = '';
+
+  /**
+   * DRS and the boost (null: not in this race): DRS off (grey), cleared for
+   * the zone ahead (amber) or open (green); the battery, and boosting.
+   */
+  setPower(p: { drs: 'off' | 'armed' | 'open'; battery: number; boosting: boolean } | null): void {
+    this.power.hidden = !p;
+    if (!p) return;
+    if (p.drs !== this.drsState) {
+      this.drsState = p.drs;
+      this.drsChip.className = `drs-chip ${p.drs}`;
+    }
+    const pct = `${Math.round(p.battery * 50) * 2}%`;
+    if (pct !== this.ersPct) {
+      this.ersPct = pct;
+      this.ersFill.style.width = pct;
+    }
+    if (p.boosting !== this.ersOn) {
+      this.ersOn = p.boosting;
+      this.power.classList.toggle('boosting', p.boosting);
+    }
+  }
 
   /** Shows or hides the minimap (Display settings). */
   showMinimap(on: boolean): void {

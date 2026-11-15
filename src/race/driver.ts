@@ -44,6 +44,8 @@ export interface DriveOptions {
   offRoad?: boolean;
   /** Lift and brake when the path needs more steering lock than the car has at this speed (on by default; the assists, which only advise, leave it off). */
   lockGuard?: boolean;
+  /** How much past its top speed it may go on a straight (a share): DRS open, or the boost. */
+  extraTop?: number;
   /** The tyres' grip as a share of what the plan was made for (worn tyres: slower through the bends; softer or rain tyres: quicker). */
   grip?: number;
   /** The brakes' bite as a share of what the plan was made for (a road getting wet: less, so it brakes earlier). */
@@ -401,7 +403,7 @@ export class RacingDriver {
   drive(st: CarState, lane = 0, out?: DriveInput, opts: DriveOptions = {}): DriveInput {
     const H = HANDLING;
     const o = out ?? { throttle: 0, brake: 0, steer: 0, handbrake: false };
-    const { pace = 1, cap = Infinity, tow = 0, keep = null, late = false, route = null, offRoad = false, grip = 1, brake: bite = 1, lockGuard = true } = opts;
+    const { pace = 1, cap = Infinity, tow = 0, keep = null, late = false, route = null, offRoad = false, grip = 1, brake: bite = 1, lockGuard = true, extraTop = 0 } = opts;
     const v = Math.max(0, st.speed);
     const kept = keep;
     const base = route ? (offRoad ? route : (x: number) => this.clampLat(x, route(x))) : (x: number) => this.lateralAt(x, lane);
@@ -470,7 +472,8 @@ export class RacingDriver {
       limit = Math.min(top, limit * f);
     }
     // In a tow it may go past its own top speed, as the tow lets the car (where the bends allow).
-    if (tow > 0 && limit >= top - 0.5) limit = top * (1 + HANDLING.slipstreamTopSpeed * tow);
+    // (So may DRS and the boost.)
+    if ((tow > 0 || extraTop > 0) && limit >= top - 0.5) limit = top * (1 + HANDLING.slipstreamTopSpeed * tow + extraTop);
     const target = Math.min(cap, limit * pace);
     // The plan already assumes full throttle out of corners and firm braking into them,
     // so drive it hard: flat out below the target, brake firmly above it.

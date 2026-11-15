@@ -68,6 +68,35 @@ export function pickCompound(lapsLeft: number, mediumLife: number, wetness: numb
   return preference;
 }
 
+/**
+ * The two-compound rule (a championship's Grands Prix in the dry): met once a
+ * car has raced on two different dry compounds, or on wets at all.
+ */
+export function compoundsMet(used: readonly Compound[]): boolean {
+  return used.includes('wet') || new Set(used).size >= 2;
+}
+
+/**
+ * The tyres for a stop under the two-compound rule: `want`, unless the rule
+ * isn't met yet and `want` is the kind already run. Then another dry kind:
+ * the quickest that lasts the `lapsLeft` laps, else the longest-lasting.
+ */
+export function ruleCompound(want: Compound, used: readonly Compound[], lapsLeft: number, mediumLife: number): Compound {
+  if (want === 'wet' || compoundsMet(used) || !used.includes(want)) return want;
+  const others = (['soft', 'medium', 'hard'] as const).filter((c) => !used.includes(c));
+  const lasts = others.find((c) => compoundLife(c, 0, mediumLife) + CONDITIONS.pitEndSlack >= lapsLeft);
+  return lasts ?? others[others.length - 1] ?? want;
+}
+
+/**
+ * When the two-compound rule makes a car stop that wouldn't otherwise: once
+ * the race is about half run (give or take `early` laps), with at least a
+ * lap and a half to go.
+ */
+export function ruleStopDue(lapsLeft: number, lapsToRun: number, early = 0): boolean {
+  return lapsLeft >= CONDITIONS.pitMinLaps + 0.5 && lapsLeft <= lapsToRun * 0.5 + early;
+}
+
 const wingLaps = new WeakMap<Track, Record<WingLevel, number>>();
 
 /** The flat-out planned lap on `track` with each wing (s): low wing wins where the straights are long, high where the bends are fast. */

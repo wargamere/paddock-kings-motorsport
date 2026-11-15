@@ -71,6 +71,8 @@ export interface EventResult {
   dnf: string[];
   /** Who set the fastest lap (null: nobody set a clean one). */
   fastest: string | null;
+  /** Who was disqualified: in a Grand Prix with the two-compound rule, a car that finished on one dry compound. */
+  dsq?: string[];
   /** Each car's race time from the start (s) and laps completed, in `order`'s order; the time is null for a car that didn't finish. */
   times: (number | null)[];
   laps: number[];
@@ -88,7 +90,10 @@ export interface EventResult {
 export interface RaceEventSpec {
   /** The race's settings (laps, weather, tyres, damage, …): used instead of the game's setup, which it never changes. */
   setup: RaceSetup;
-  session: 'practice' | 'qualifying' | 'race';
+  /** Practice, (knockout) qualifying, a sprint weekend's sprint, or the Grand Prix. */
+  session: 'practice' | 'qualifying' | 'sprint' | 'race';
+  /** Every car must race on two different dry compounds (unless it runs wets), or be disqualified. */
+  twoCompounds?: boolean;
   /** "Round 3 of 16", for the HUD. */
   title: string;
   you: { id: string; name: string; paint: number; secondary?: number; box: number };

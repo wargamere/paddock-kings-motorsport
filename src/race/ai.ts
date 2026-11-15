@@ -1,7 +1,7 @@
 import { CarPhysics, NO_INPUT, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
 import { standardBrake, standardGrip } from '../car/tyres.ts';
 import { HANDLING } from '../config/handling.ts';
-import { AI, CONDITIONS, DAMAGE, FLAGS, PIT_LANE, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, DRS, ERS, FLAGS, PIT_LANE, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
 import { clamp, wrap } from '../core/math.ts';
 import { outerAt, type PitLane } from '../track/pitLane.ts';
 import { edgeOffsets } from '../track/spline.ts';
@@ -9,7 +9,7 @@ import type { Track } from '../track/track.ts';
 import { RacingDriver } from './driver.ts';
 import { along, PitCrew } from './pitStop.ts';
 import { carPace, planLapTime, racingLine, roadPace, speedProfile, type Pace } from './racingLine.ts';
-import { pickCompound, preferredCompound, suggestedSetup, trackTyreLife } from './strategy.ts';
+import { compoundsMet, pickCompound, preferredCompound, ruleCompound, ruleStopDue, suggestedSetup, trackTyreLife } from './strategy.ts';
 import { RaceSession } from './session.ts';
 import { aiCars, TrafficPlanner } from './traffic.ts';
 import type { RacecraftAction } from './racecraft.ts';
@@ -192,6 +192,10 @@ export class AiDriver {
   /** The road its speed plan was made for: dry (0) or soaked (1). As the road gets wetter or drier it drives by the grip and brakes there are against that. */
   private readonly planWetness: number;
 
+  /** It has the overtake boost (a race with DRS and the boost): it uses it to pass and to defend. */
+  private readonly ers: boolean;
+  /** The two-compound rule is in force: it races on two dry compounds (or runs wets), stopping for it if it must. */
+  private readonly twoCompounds: boolean;
   /** Called in to stop this lap whatever its tyres, for these (cleared once it has stopped). */
   boxCall: Compound | null = null;
   /** Race control: the most it may go (the safety car), and yellow flags where it is. */
@@ -204,7 +208,7 @@ export class AiDriver {
    * `slot`: its place on the grid; `box`: whose pit box it uses (see pitBox:
    * 0 is yours; by default slot + 1).
    */
-  constructor(track: Track, opts: { name: string; paint: number; difficulty: number; laps: number; slot: number; box?: number; wet?: boolean; tyreWear?: boolean; damage?: boolean; mediumLife?: number; tune?: Readonly<CarPerformance> }) {
+  constructor(track: Track, opts: { name: string; paint: number; difficulty: number; laps: number; slot: number; box?: number; wet?: boolean; tyreWear?: boolean; damage?: boolean; mediumLife?: number; tune?: Readonly<CarPerformance>; twoCompounds?: boolean; ers?: boolean }) {
     const wet = !!opts.wet;
     this.name = opts.name;
     this.paint = opts.paint;
@@ -229,11 +233,13 @@ export class AiDriver {
     // Not everyone stops on the same lap, or picks the same tyres for a stint.
     this.pitEarly = CONDITIONS.pitEarly[opts.slot % CONDITIONS.pitEarly.length];
     this.preference = preferredCompound(opts.slot);
+    this.twoCompounds = !!opts.twoCompounds && !!opts.tyreWear;
+    this.ers = !!opts.ers;
     if (opts.tyreWear) {
       // (How long the tyres last: the track's own figure, unless the race says otherwise.)
       this.car.mediumLife = opts.mediumLife ?? trackTyreLife(track);
       // The quickest tyres that last the race, else its own choice.
-      this.car.newTyres(pickCompound(opts.laps, this.car.mediumLife, wet ? 1 : 0, this.preference));
+      this.car.newTyres(pickCompound(opts.laps, this.car.mediumLife, wet ? 1 : 0, this.preference), true);
     }
     aiCars.set(this.car.state, opts.difficulty);
     const g = gridPlace(track, opts.slot);
@@ -351,12 +357,16 @@ export class AiDriver {
     } else if (!car.wear) return null;
     else if (wantWets === onWets) {
       // Wear: in now if they'd go off before the box comes round again (give or take its own
-      // margin), unless the race is all but over, or they'll last to the finish.
+      // margin), unless the race is all but over, or they'll last to the finish. Or the
+      // two-compound rule: a stop it must make, about half-way.
       const onTyres = car.tyreLapsLeft;
-      if (onTyres >= 1 + this.pitEarly) return null;
-      if (left < C.pitMinLaps || left <= onTyres + C.pitEndSlack) return null;
+      const worn = onTyres < 1 + this.pitEarly && left >= C.pitMinLaps && left > onTyres + C.pitEndSlack;
+      const rule = this.twoCompounds && !compoundsMet(car.tyresUsed) && ruleStopDue(left, s.lapsToRun, this.pitEarly);
+      if (!worn && !rule) return null;
     } else if (left < C.pitMinLaps) return null;
-    return car.wear ? pickCompound(left, car.mediumLife, wantWets ? 1 : 0, this.preference) : car.compound;
+    if (!car.wear) return car.compound;
+    const fit = pickCompound(left, car.mediumLife, wantWets ? 1 : 0, this.preference);
+    return this.twoCompounds ? ruleCompound(fit, car.tyresUsed, left, car.mediumLife) : fit;
   }
 
   /**
@@ -533,7 +543,7 @@ export class AiDriver {
       this.lane = st.lateral - this.driver.lateralAt(st.s);
       this.laneVel = 0;
     }
-    const inp = this.driver.drive(st, this.lane, this.inp, { pace, cap, tow: this.car.draft, keep, late: this.planner.fighting, route, offRoad: !!pit?.offRoad, grip: (this.car.gripScale * this.car.damageGrip) / standardGrip(this.planWetness), brake: this.car.brakeScale / standardBrake(this.planWetness) });
+    const inp = this.driver.drive(st, this.lane, this.inp, { pace, cap, tow: this.car.draft, keep, late: this.planner.fighting, route, offRoad: !!pit?.offRoad, grip: (this.car.gripScale * this.car.damageGrip) / standardGrip(this.planWetness), brake: this.car.brakeScale / standardBrake(this.planWetness), extraTop: (this.car.drs ? DRS.top : 0) + (this.car.boosting ? ERS.top : 0) });
     // Sliding (knocked, or ran wide): easing off the throttle until it gathers itself. No braking,
     // which would only surprise the car behind. (Being off its path is already taken care of:
     // the speed then comes from the path it's really on.)
@@ -557,6 +567,9 @@ export class AiDriver {
       inp.brake = Math.max(inp.brake, clamp(need / (HANDLING.brakeDecel * 0.9), 0.3, 1));
     }
 
+    // The overtake boost: to pass, or to keep a car behind.
+    inp.boost = this.ers && !finished && !pit && !this.yellow && !Number.isFinite(this.raceCap) && this.recover <= 0 && this.wantsBoost(st, cars, inp);
+
     // Stuck against something (or spun into the grass): back onto the road, once nobody is
     // coming up behind (it would be put right in front of them).
     this.stuck = Math.abs(st.speed) < 1.5 && !pit ? this.stuck + dt : 0;
@@ -569,5 +582,26 @@ export class AiDriver {
       return NO_INPUT;
     }
     return inp;
+  }
+
+  /**
+   * The boost, on a straight at full throttle: closing on a car within
+   * ERS.attack m ahead, or a car within ERS.defend m behind, keeping
+   * ERS.reserve of the battery back (half of it defending) until the last lap.
+   */
+  private wantsBoost(st: CarState, cars: readonly CarState[], inp: DriveInput): boolean {
+    if (inp.throttle < 0.95 || inp.brake > 0 || Math.abs(inp.steer) > 0.25 || st.inPits) return false;
+    const L = this.length;
+    let ahead = Infinity;
+    let behind = Infinity;
+    for (const o of cars) {
+      if (o === st) continue;
+      const ds = wrap(o.s - st.s + L / 2, L) - L / 2;
+      if (ds > 0) ahead = Math.min(ahead, ds);
+      else behind = Math.min(behind, -ds);
+    }
+    const s = this.session;
+    const reserve = s.laps.length >= s.lapsToRun - 1 ? 0 : ERS.reserve;
+    return (ahead < ERS.attack && this.car.ers > reserve) || (behind < ERS.defend && this.car.ers > reserve / 2);
   }
 }

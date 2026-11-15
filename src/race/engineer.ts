@@ -1,6 +1,6 @@
 import { CONDITIONS, DAMAGE, ENGINEER, type Compound } from '../config/race.ts';
 import { STR, fmt } from '../config/strings.ts';
-import { pickCompound, WET_FROM } from './strategy.ts';
+import { compoundsMet, pickCompound, ruleCompound, ruleStopDue, WET_FROM } from './strategy.ts';
 
 /** A car next to you in the race, as your engineer sees it. */
 export interface EngineerCar {
@@ -39,6 +39,10 @@ export interface EngineerView {
   /** The safety car, and how many times it has been out. */
   safetyCar: 'none' | 'out' | 'in';
   safetyCarCount: number;
+  /** The two-compound rule, if it's in force: the kinds of tyre you've run so far. */
+  rule?: { used: readonly Compound[] } | null;
+  /** DRS is enabled (from the second lap, in the dry, with no safety car). */
+  drs?: boolean;
 }
 
 /** A radio message. `urgent`: a call to act on now (box, the safety car, the weather). */
@@ -49,7 +53,7 @@ export interface RadioCall {
 
 /** Why you'd stop now: worn tyres, the weather, damage; and the tyres to fit. */
 export interface StopCall {
-  reason: 'tyres' | 'rain' | 'dry' | 'damage';
+  reason: 'tyres' | 'rain' | 'dry' | 'damage' | 'rule';
   tyres: Compound | null;
 }
 
@@ -82,12 +86,25 @@ export class RaceEngineer {
   /** The tyres your engineer wants on at the next stop (the pit crew has them ready). */
   plan: Compound | null = null;
 
+  /** The two-compound rule is in force and not met yet. */
+  private static owed(v: EngineerView): boolean {
+    return !!v.rule && !compoundsMet(v.rule.used);
+  }
+
+  /** The tyres for a stint of `laps` laps from now: what lasts it (wets in the wet), and under the two-compound rule a second dry kind. */
+  static tyresFor(v: EngineerView, laps: number, wetness: number): Compound | null {
+    const t = v.tyres;
+    if (!t) return null;
+    const c = pickCompound(laps, t.mediumLife, wetness, 'medium');
+    return v.rule ? ruleCompound(c, v.rule.used, laps, t.mediumLife) : c;
+  }
+
   /** Whether you should come in now, and for what (null: stay out). */
   static stopCall(v: EngineerView): StopCall | null {
     const C = CONDITIONS;
     const t = v.tyres;
     if (v.lapsLeft < C.pitMinLaps || v.pitting) return null;
-    const tyresFor = (wetness: number) => (t ? pickCompound(v.lapsLeft, t.mediumLife, wetness, 'medium') : null);
+    const tyresFor = (wetness: number) => RaceEngineer.tyresFor(v, v.lapsLeft, wetness);
     if (t) {
       const wet = t.wetness >= WET_FROM;
       if (wet && t.compound !== 'wet') return { reason: 'rain', tyres: 'wet' };
@@ -96,14 +113,18 @@ export class RaceEngineer {
     }
     if (v.damage !== null && v.damage >= DAMAGE.aiPitAt) return { reason: 'damage', tyres: t ? tyresFor(t.wetness) : null };
     if (t && t.lapsLeft < 1 + ENGINEER.boxEarly && v.lapsLeft > t.lapsLeft + C.pitEndSlack) return { reason: 'tyres', tyres: tyresFor(t.wetness) };
+    if (t && RaceEngineer.owed(v) && ruleStopDue(v.lapsLeft, v.lapsToRun)) return { reason: 'rule', tyres: tyresFor(t.wetness) };
     return null;
   }
 
-  /** Laps until the tyres need changing (Infinity: they last the race, or there's no wear). */
+  /** Laps until the next stop (Infinity: the tyres last the race and none is owed, or there's no wear). */
   private static stopIn(v: EngineerView): number {
     const t = v.tyres;
-    if (!t || v.lapsLeft <= t.lapsLeft + CONDITIONS.pitEndSlack) return Infinity;
-    return Math.max(0, t.lapsLeft - 1 - ENGINEER.boxEarly);
+    if (!t) return Infinity;
+    const worn = v.lapsLeft <= t.lapsLeft + CONDITIONS.pitEndSlack ? Infinity : Math.max(0, t.lapsLeft - 1 - ENGINEER.boxEarly);
+    // (The two-compound rule: a stop about half-way, if it's not too late.)
+    const rule = RaceEngineer.owed(v) && v.lapsLeft >= CONDITIONS.pitMinLaps + 0.5 ? Math.max(0, v.lapsLeft - v.lapsToRun * 0.5) : Infinity;
+    return Math.min(worn, rule);
   }
 
   /** Something to say: kept until it can be (or it's stale). Each key is said once. */
@@ -125,6 +146,15 @@ export class RaceEngineer {
       this.want('start', d > 0 ? fmt(R.startGained, { n: d, pos: v.pos }) : d < 0 ? fmt(R.startLost, { n: -d, pos: v.pos }) : fmt(R.startHeld, { pos: v.pos }), false, now);
     }
 
+    // The two-compound rule: a reminder at the start, and a warning once it's too late.
+    if (RaceEngineer.owed(v)) {
+      if (v.lapsDone === 0 && now >= E.ruleAfter) this.want('rule', R.ruleReminder, false, now);
+      if (!v.pitting && v.lapsLeft < CONDITIONS.pitMinLaps + 0.5) this.want('ruleMissed', R.ruleMissed, true, now);
+    }
+
+    // DRS enabled.
+    if (v.drs && !p?.drs && v.cars > 1) this.want('drs', R.drsOn, false, now);
+
     // The weather to come.
     if (v.forecast && v.lapsLeft > 0.5) {
       const s = Math.max(5, Math.round(v.forecast.in / 5) * 5);
@@ -135,7 +165,7 @@ export class RaceEngineer {
     if (v.safetyCar === 'out' && p?.safetyCar !== 'out') {
       const cheap = t && !v.pitting && v.lapsLeft >= 2 && t.left < E.scStopBelow && RaceEngineer.stopIn(v) < Infinity;
       if (cheap) {
-        this.plan = pickCompound(v.lapsLeft, t.mediumLife, t.wetness, 'medium');
+        this.plan = RaceEngineer.tyresFor(v, v.lapsLeft, t.wetness);
         this.want(`sc:${v.safetyCarCount}`, fmt(R.scBox, { tyres: tyres(this.plan) }), true, now);
       } else this.want(`sc:${v.safetyCarCount}`, R.scOut, true, now);
     }
@@ -154,7 +184,7 @@ export class RaceEngineer {
       const stopIn = RaceEngineer.stopIn(v);
       // The plan for the stop ahead.
       if (stopIn <= E.planFrom && stopIn >= 1 && v.lapsDone >= 1) {
-        this.plan = pickCompound(v.lapsLeft - stopIn, t.mediumLife, t.wetness, 'medium');
+        this.plan = RaceEngineer.tyresFor(v, v.lapsLeft - stopIn, t.wetness);
         this.want(`plan:${stint}`, fmt(R.plan, { n: Math.round(stopIn), tyres: tyres(this.plan) }), false, now);
       }
       // Tyres that just about last: stay out and look after them.
@@ -170,7 +200,7 @@ export class RaceEngineer {
       const b = v.behind;
       if (b && b.pitting && p?.behind?.id === b.id && !p.behind.pitting && b.gap !== null && b.gap <= E.undercutGap) {
         const cover = RaceEngineer.stopIn(v) <= E.coverLaps;
-        if (cover) this.plan = pickCompound(v.lapsLeft, t.mediumLife, t.wetness, 'medium');
+        if (cover) this.plan = RaceEngineer.tyresFor(v, v.lapsLeft, t.wetness);
         this.want(`undercut:${b.id}:${b.stops}`, fmt(cover ? R.undercutCover : R.undercutStay, { name: b.name, tyres: tyres(this.plan) }), cover, now);
       }
       const a = v.ahead;
