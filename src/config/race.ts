@@ -232,6 +232,26 @@ export const SETUP = {
   },
 } as const;
 
+/**
+ * The pit wall (championship races): the calls you make for your AI
+ * teammate. A pace mode drives at `pace` × its usual pace and wears the
+ * tyres `wear` × as fast (pushing slides them more; saving them is gentler on
+ * the throttle). Radio messages: a car within `undercutGap` s of you that
+ * pits is an undercut threat; your teammate's tyres are "going off" with
+ * less than `tyresLow` of their life left.
+ */
+export type PaceMode = 'push' | 'normal' | 'save';
+export const PIT_WALL = {
+  modes: {
+    push: { pace: 1.01, wear: 1.3 },
+    normal: { pace: 1, wear: 1 },
+    save: { pace: 0.985, wear: 0.72 },
+  },
+  order: ['normal', 'push', 'save'],
+  undercutGap: 3,
+  tyresLow: 0.2,
+} as const;
+
 /** A kind of tyre (see TYRES.compounds). */
 export type Compound = 'soft' | 'medium' | 'hard' | 'wet';
 
@@ -356,6 +376,8 @@ export const AI = {
   gridLateral: 2.2,
   /** First slot's distance behind the line. */
   gridFront: 8,
+  /** The AI cars make their first decision over this many physics ticks at the end of the countdown, one or two a tick (not all on the tick the lights go out). */
+  firstPlanSpread: 24,
   /** Stuck (slower than 1.5 m/s) this long: back onto the road. */
   stuckSeconds: 2.5,
   /** For the first this many metres of a race, each grid slot back drives this much slower (a share). */

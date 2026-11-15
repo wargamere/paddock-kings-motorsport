@@ -1,7 +1,7 @@
 import { CarPhysics, NO_INPUT, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
 import { standardBrake, standardGrip } from '../car/tyres.ts';
 import { HANDLING } from '../config/handling.ts';
-import { AI, CONDITIONS, DAMAGE, FLAGS, PIT_LANE, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, FLAGS, PIT_LANE, TRAFFIC, WEATHER, type Compound, PIT_WALL, type PaceMode } from '../config/race.ts';
 import { clamp, wrap } from '../core/math.ts';
 import { outerAt, type PitLane } from '../track/pitLane.ts';
 import { edgeOffsets } from '../track/spline.ts';
@@ -194,6 +194,15 @@ export class AiDriver {
 
   /** Called in to stop this lap whatever its tyres, for these (cleared once it has stopped). */
   boxCall: Compound | null = null;
+  /** The pit wall's pace call (championship teammates): faster and harder on the tyres, or slower and gentler. */
+  private paceMode: PaceMode = 'normal';
+  get mode(): PaceMode {
+    return this.paceMode;
+  }
+  set mode(m: PaceMode) {
+    this.paceMode = m;
+    this.car.wearRate = PIT_WALL.modes[m].wear;
+  }
   /** Race control: the most it may go (the safety car), and yellow flags where it is. */
   raceCap = Infinity;
   yellow = false;
@@ -449,7 +458,21 @@ export class AiDriver {
   drive(cars: readonly CarState[], dt: number): DriveInput {
     const st = this.car.state;
     const s = this.session;
-    if (!s.canDrive) return NO_INPUT;
+    if (!s.canDrive) {
+      // The first decision, made in the last moments of the countdown, one car a tick (the
+      // cars stand still on the grid meanwhile): all of them at once at the start made the
+      // frame the lights go out on a long one. It's ready the moment the car can go.
+      const left = Math.round(s.goTime / dt) - s.tick;
+      if (this.firstPlan && s.phase === 'countdown' && left === 1 + (this.slot % AI.firstPlanSpread)) {
+        this.planner.tacticsEnabled = !this.yellow && !Number.isFinite(this.raceCap);
+        this.planner.plan(st, cars, this.lane);
+        this.firstPlan = false;
+        // Its next decision then comes when it would have, had it made this one at the start.
+        const ticks = Math.floor(TRAFFIC.planEvery / dt) + 1;
+        this.planIn = (ticks - .5 + this.slot % ticks) * dt + dt;
+      }
+      return NO_INPUT;
+    }
     // Retired (broken down): it's out of the race, stopped where it is (the car itself sees to that).
     if (s.retired) return NO_INPUT;
     const finished = s.phase === 'finished';
@@ -506,6 +529,8 @@ export class AiDriver {
     if (this.planner.crowded) pace *= 1 - TRAFFIC.crowdEase;
     // Yellow flags: ease off.
     if (this.yellow) pace *= FLAGS.yellowPace;
+    // The pit wall's call (not after the flag).
+    if (!finished) pace *= PIT_WALL.modes[this.paceMode].pace;
     // Stuck behind a slower car that isn't an AI (you): a push to get by, like a tow (see
     // TrafficPlanner.pushing).
     if (this.planner.pushing) this.car.draft = Math.max(this.car.draft, TRAFFIC.pushTow);

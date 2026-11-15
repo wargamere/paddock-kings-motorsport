@@ -25,7 +25,7 @@ const game: GameContext = {
   mode: 'race', lastResult: null, interrupted: false, preview: null,
   drive() {}, start() {}, openSetup() {}, closeSetup() {}, refreshPaint() {},
   go(id) { if (current === 'career') screen.exit(); current = id; if (id === 'career') screen.enter(); },
-  event: null, startEvent(e) { event = e; screen.exit(); current = 'race'; }, career: new CareerStore(),
+  event: null, startEvent(e) { event = e; screen.exit(); current = 'race'; }, career: new CareerStore(), lastReplay: null, replayBack: 'results', watchReplay() {},
 };
 const screen = new CareerScreen(game); screen.enter();
 after(() => win.close());

@@ -91,6 +91,8 @@ interface Shown {
  * want you for the next season. Everything is saved as it happens.
  */
 export class CareerScreen implements Screen {
+  /** Leaving for the replay of the race just run (its result stays to be shown on the way back). */
+  private toReplay = false;
   readonly layer = '3d';
   private readonly game: GameContext;
   private readonly root: HTMLElement;
@@ -191,7 +193,9 @@ export class CareerScreen implements Screen {
     this.abort?.abort();
     this.abort = null;
     this.root.remove();
-    this.shown = null;
+    // (Off to watch the race again: its result is still to be shown when we're back.)
+    if (!this.toReplay) this.shown = null;
+    this.toReplay = false;
     this.restore?.();
     this.restore = null;
     this.game.view3d?.setConditions(null);
@@ -779,7 +783,7 @@ export class CareerScreen implements Screen {
           h('tbody', {}, ...rows),
         ),
       ),
-      h('div', { class: 'menu row setup-buttons career-foot' }, button(C.continue, next, { icon: '▶', class: 'primary', key: 'Enter' })),
+      h('div', { class: 'menu row setup-buttons career-foot' }, this.game.lastReplay ? button(STR.replay.open, () => { this.toReplay = true; this.game.watchReplay('career'); }, { icon: '🎬' }) : null, button(C.continue, next, { icon: '▶', class: 'primary', key: 'Enter' })),
     ];
   }
 

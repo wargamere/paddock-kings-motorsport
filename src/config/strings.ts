@@ -347,6 +347,72 @@ export const STR = {
     stopped: 'The rain has stopped: the line will dry first',
   },
 
+  /** Watching a race again (race/replayScreen.ts). */
+  replay: {
+    badge: 'REPLAY',
+    open: 'Watch replay',
+    highlights: 'Highlights',
+    full: 'Full race',
+    cams: { tv: 'TV', chase: 'Chase', onboard: 'Onboard', heli: 'Helicopter' },
+    play: 'Play',
+    pause: 'Pause',
+    back10: 'Back',
+    next: 'On',
+    prevCar: 'Follow the car ahead',
+    nextCar: 'Follow the car behind',
+    scrub: 'Race time',
+    close: 'Back',
+    lap: 'Lap {n}',
+    lapOf: 'LAP {n}/{total}',
+    clipOf: 'HIGHLIGHT {n}/{total}',
+    keys: 'Space play/pause · ← → skip · ↑ ↓ car · C camera · H highlights / full race · 1–4 speed · Esc back',
+    events: {
+      start: 'Lights out!',
+      pass: '{a} passes {b} for P{pos}',
+      contact: 'Contact for {a}',
+      pit: '{a} pits from P{pos}',
+      retire: '{a} is out of the race',
+      safetyCar: 'Safety car!',
+      finish: '{a} takes the chequered flag',
+    },
+    /** The same moments when they are yours. */
+    yours: {
+      pass: 'You pass {b} for P{pos}',
+      passed: '{a} passes you for P{pos}',
+      contact: 'Contact for you',
+      pit: 'You pit from P{pos}',
+      retire: 'You are out of the race',
+      finish: 'You take the chequered flag',
+    },
+  },
+
+  /** The pit wall in a championship race (ui/pitWall.ts): your teammate's car, and your race engineer. */
+  pitWall: {
+    title: 'Pit wall',
+    car: 'Car 2 · {name} · P{pos}',
+    gap: '{gap} s to the car ahead',
+    leading: 'Leading',
+    out: 'Out of the race',
+    pitting: 'In the pits',
+    called: 'Called in: box this lap for {tyres}',
+    tyres: '{kind} · {age} laps old · {left}% left · {laps} laps to go',
+    paceLabel: 'Teammate’s pace',
+    modes: { push: 'Push', normal: 'Normal', save: 'Save tyres' },
+    tyresLabel: 'Tyres for the stop',
+    box: 'Box',
+    cancel: 'Cancel box',
+    /** Flashed when you make a call. */
+    boxed: 'Box, box: {name} pits this lap for {tyres}',
+    unboxed: 'Stay out: {name}’s stop is off',
+    mode: '{name}: {mode}',
+    modeNames: { push: 'push now (faster, harder on the tyres)', normal: 'normal pace', save: 'save the tyres (slower, they last longer)' },
+    /** Your race engineer. */
+    undercut: 'Radio: {name} (P{pos}) has pitted. Box this lap to cover the undercut?',
+    mateTyres: 'Radio: {name}’s tyres are going off. Call them in? (B)',
+    mateRain: 'Radio: it’s wet enough for rain tyres. Call {name} in for wets? (B)',
+    mateDry: 'Radio: the line is drying. Call {name} in for slicks? (B)',
+  },
+
   /** The timing tower in a race (ui/timingTower.ts). */
   tower: {
     title: 'Timing',
@@ -406,6 +472,8 @@ export const STR = {
       pause: 'Pause',
       mute: 'Sound on / off',
       tower: 'Timing tower',
+      boxCall: 'Pit wall: box your teammate',
+      paceMode: 'Pit wall: teammate’s pace',
     },
   },
 
@@ -806,6 +874,8 @@ export const STR = {
       gears: 'gear up / down',
       restart: 'restart lap',
       tower: 'timing',
+      boxCall: 'box teammate',
+      paceMode: 'teammate pace',
     },
     hintGamepad: 'RT drive · LT brake & reverse · stick steer · Back reset · Y camera · Start pause',
     hintTouch: 'Hold ◀ ▶ to steer, GAS and BRAKE on the right. Hold BRAKE to reverse.',

@@ -65,13 +65,16 @@ src/
               (line + speed plan), driver.ts (drives it), traffic.ts (racing other
               cars), bot.ts (test driver), medals.ts (medal times), assists.ts
               (braking and steering assists), pitStop.ts (pit box and pit stops),
-              strategy.ts (tyre life per track, AI tyre choices), classify.ts (race order)
+              strategy.ts (tyre life per track, AI tyre choices), classify.ts (race order),
+              replay.ts (recording a race, its moments and highlights),
+              replayScreen.ts (watching it back with TV cameras)
   ui/         dom helpers, menuScreen.ts (main menu), setupPanel.ts (car setup), raceSetupScreen.ts (race
               setup), assistsPanel.ts, conditionsPanel.ts (rain, time of day,
               tyre wear), controlsPanel.ts (key bindings), gridOverlay.ts (grid after qualifying), editor overlay, HUD,
               minimap, pause menu, touch controls,
               libraryScreen.ts (track library), careerScreen.ts (the career's
-              paddock), shareDialog.ts, style.css
+              paddock), pitWall.ts (your teammate's calls in a career race),
+              shareDialog.ts, style.css
   audio/      audio.ts (synthesised engine, tyre squeal, grass rumble, rain, beeps)
   platform/   platform.ts (PLATFORM flag + CAPS), services.ts (what the game calls:
               loading/gameplay events, ads, user, device), crazygames.ts (SDK wrapper),
@@ -86,6 +89,8 @@ src/
 ### 3D scene
 
 Everything static is merged or instanced, which comes to about 15 draw calls for a whole track: sky, terrain, outer ground, hills, road, bridge decks, kerbs, barriers, pillars, the gantry frame, one atlas mesh for the banner and start line, two instanced prop meshes and instanced cones. All textures are drawn on small canvases at startup. Lambert materials, no shadows. In dev builds (`npm run dev`) the race HUD shows fps, draw calls and triangles.
+
+**Automatic resolution.** While racing, if the frames come slowly and it's the graphics card that's slow (the game's own work takes well under the frame time), the game renders fewer pixels, a step at a time, down to half the graphics setting's pixel ratio; when frames come easily again it steps back up (`render/resolution.ts`). A high-DPI laptop screen with a modest GPU is the usual case. Measurements and the other frame-time work are in [`docs/race-performance.md`](docs/race-performance.md).
 
 **Elevation.** Every dot has a height (0–40 m, in 0.5 m steps) and the spline carries it round the loop. The road banks into corners (off / 7° / 15°, scaled by how tight the corner is). Any corner can have its own angle instead: the override is stored on that corner's dots (`Dot.b`) and blends to the neighbours'. `track/surface.ts` builds the ground from the road: a 5 m heightfield that follows the road, with the shoulders tilted like the road, and fades back to flat 55 m away. On a road's own shoulder that road decides the height, so a raised road keeps its embankment next to a lower stretch; where two shoulders overlap (under a bridge) the lower road wins, and between roads the ground slopes from one to the other. On the inside of a banked corner the ground stays level with the road's low inner edge. The ground sits flush with the road (3 cm under it). A final pass pushes it down wherever it would show through the road or a kerb. The check is exact: the terrain mesh and `terrainHeight()` split every 5 m cell along the same diagonal, and each drawn road and kerb triangle is tested at every point where the two surfaces can meet (its corners, grid nodes inside it, and where its edges cross grid lines and cell diagonals; see `forEachGroundProbe`). It only lowers the ground where there really is road, so it digs no pits inside hairpins, and each grid point only by its share, so there's no trough beside the road. A 2.6 m skirt in the ground's colour hangs under the road's outer edge for where the ground falls away. Road above the ground there becomes a **bridge deck** with concrete sides, rails and pillars, and no pillar stands on a road below.
 
@@ -116,6 +121,7 @@ Physics runs at a fixed 120 Hz from an accumulator (`core/fixedStep.ts`), and re
 | Camera (chase / bonnet) | C | Y | — |
 | Pause | Esc / P | Start | Ⅱ button |
 | Timing tower (full / compact / hidden) | T | — | tap it (full / compact) |
+| Pit wall: box your teammate / their pace (career) | B / J | — | the pit wall's buttons |
 
 **Your own keys** (`car/bindings.ts`, `ui/controlsPanel.ts`). The keyboard keys above are the defaults. ⌨ Controls, in the main menu and the pause menu, changes them: every driving action (drive, brake, steer left and right, gear up and down, reset, camera, pause, sound, timing tower) has two keys. Click one and press the new key; Esc cancels and Backspace clears it. A key already used by another action moves over, and the panel says from where. Reset to defaults puts them all back. Esc always pauses whatever you set, and Tab, Ctrl, Alt and the system keys can't be bound. Keys are physical keys (`KeyboardEvent.code`), shown as your keyboard layout prints them where the browser can say (Z for W on AZERTY). The race's controls hint, the pause menu and the assists panel all show your keys. The gamepad and touch controls don't change.
 
@@ -572,6 +578,18 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
     - *A car leaning on a barrier can turn its nose away.* A scrape (under 2 m/s into the barrier, `HANDLING.wallKnock`) only checks a turn *into* it; before, every touch killed the car's rotation, so a car turned in against the wall could never drive off.
     - The same 12 laps now: no safety car, no yellow flags, 18 → 1 barrier knocks and 11 → 3 car-to-car hits (none hard). Spa, Baku, Monaco, Montréal and Sunday Loop show no safety car either. A test runs a full field round the Nürburgring.
 
+### Replays
+
+Every race (not practice) is recorded as it's run (`race/replay.ts`, numbers in `config/replay.ts`): each car 15 times a second (position, heading, lean, steering, speed, how far round the race, retired or not), the safety car, and the moments worth seeing again: the start, passes on the track for a place, hard hits, pit stops, retirements, the safety car and the finish. It's about 0.7 MB for ten cars over two minutes; nothing past an hour is kept.
+
+*Watch replay* (V) on the results, and 🎬 *Watch replay* on a career round's result, opens it (`race/replayScreen.ts`). Back (Esc) returns to where you came from.
+
+- **Highlights** (the default): the start, the finish and the weightiest moments between them (passes for the lead and your own moments count most, at most 14), each from a few seconds before, one after another. **Full race** plays it all with a scrubber.
+- **Cameras** (C cycles, or the buttons): **TV** (trackside cameras on the outside of the bends, every 110 m, cutting from one to the next as the car comes by and zooming to keep it framed), **Chase**, **Onboard** and **Helicopter**. In highlights the camera follows the car in the moment; ↑ ↓ (or ‹ ›) follow another car.
+- Space plays and pauses, ← → skip to the previous or next highlight (10 s in the full race), 1–4 set the speed (½×, 1×, 2×, 4×). Names float over the cars, the running order is in the corner, and a caption says what's happening.
+- Only the last race is kept, and only until you leave the game.
+- **Tests:** `tests/replay.test.ts` (the recorder, passes and their debounce, long races, poses between samples, highlights).
+
 ### Career
 
 🏆 Career in the main menu (K): own a team, manage both cars, and choose which of its two drivers you control each weekend. Owner rules and save migration live in `src/career/owner.ts`; the dark management hub is `src/ui/ownerHub.ts` with `src/ui/owner.css`. The rules are plain data and functions in `src/career/career.ts`, the numbers and the made-up field in `src/config/career.ts`, the screen is `src/ui/careerScreen.ts`. The race screen drives each round as a `RaceEventSpec` (`core/screen.ts`) in place of a single race.
@@ -580,7 +598,11 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
 - **The cars differ, as they do in the real thing.** Each team's car has a rating (`CareerSave.cars`).
   - An AI's pace is the career's *AI speed* for the best driver in the best car, and up to 10 points of difficulty less: 70 % of that by the car, 30 % by the driver, give or take a little form each weekend.
   - *Your* car is your team's too: the slowest has 3 % less grip, 5 % less pull and 1.5 % less top speed than the best (`CarPhysics.tune`), about the same lap time as between the best and worst AI cars. So your teammate, in the same car, is the fair yardstick.
-  - Development changes the shared car rating, improving both cars. Choose rapid iteration ($1.2m, +0.018 rating, one round), a performance package ($2m, +0.035, one round), or a next-generation chassis ($3.8m, +0.065, three rounds). Each delivered package adds $0.75m to subsequent project costs. Only one project can run at once; delivery advances after completed races and survives save/reload. Rating is capped at 1; five projects can be delivered per season. Programmes reset next season. The UI refuses projects that would exceed the remaining calendar or the car’s performance ceiling.
+  - **One scale for every car** (`career/carAreas.ts`, `config/development.ts`). Every car, yours and the rivals', is three ratings on the same scale as the overall rating: aerodynamics, chassis and power unit. One formula turns them into the physics' car for everyone: grip from the aero (60 %) and chassis (40 %), engine pull from the power unit (75 %) and chassis (25 %), top speed from the power unit (80 %) and aero (20 %). With all three equal it's exactly the car as it was before areas existed. A team's overall rating is the mean of its three (`save.cars`); `save.carAreas` holds its character, each area up to 0.09 better or worse than that, so one team is quick on the straights and another in the corners.
+  - **Your parts count in the same units.** A fitted part adds its effect × 2.5 to its area on the car it's fitted to (a minor aero part: +21 PI in aero, +7 PI overall). The performance index (rating × 700) is now what the car really does on track: before, a part was worth about three times more on track than the index showed, and far more than anything a rival team brought.
+  - **Rivals develop too.** Each AI team brings about four packages a season (in a 16-round season), on rounds of its own, each to one area, its weakest more often than not. A season's programme is worth about 0.05 overall, scaled by the team's engineering strength (0.75–1.25, fixed per team) and by where it stands: the last-placed team gets 60 % more than the leader, like the real wind-tunnel allowance. 15 % of packages don't work and bring a fifth of what was hoped. Packages from your rival and the teams around you are in the inbox. Stand still and you fall back (a team that does nothing slides from 5th to 10th in five seasons); develop flat out and you climb (to 2nd in five).
+  - **Circuits differ** (`career/circuitPace.ts`). Engineering → Vehicle shows your two cars area by area against the best rival and the field average, what the next circuit rewards (the lap time the same step in each area saves there: Monza rewards the power unit, Budapest the aero) and every car's projected lap there, all driven by the same driver along the racing line by the AI's own speed planner, so the gaps are the cars'. Research and Assign upgrades show what each part would save a lap at the next circuit, car by car; the overview shows what the circuit favours and where your car is projected.
+  - (Older careers: the legacy one-click programmes, rapid iteration, performance package and next-generation chassis, still finish if one was under way.)
 - **Starting one:** your team-principal name, the team you take over, AI speed, race length and season length. You start with $8m. Headquarters expansion costs $1.5m per new level (up to three levels). Each race pays $1m + $250k per headquarters level + $35k per point scored by either car. Retired drivers earn no points bonus. One career at a time; *Abandon career* (tap twice) is in Career settings.
 - **A season** is 8, 16 or 24 rounds on the real circuits, in the order of the real calendar (Melbourne first, Yas Marina last). Shorter seasons take an even spread of it, a different one each year, so three 8-race seasons visit all 24.
 - **A race weekend.**
@@ -590,6 +612,11 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
   - Tyre wear with pit stops, damage and the safety car are always on. Teammates share a pit box. In a long race the tyres last longer (mediums at least 40 % of the distance), so it's still one or two stops, not four.
   - The weather is drawn for each round: mostly dry, sometimes rain on the way, now and then rain all race. The paddock shows the forecast, and suggests wets when it's raining.
   - Each AI car has a 3 % chance a race of a mechanical failure: it breaks down and retires, like a car damaged all the way. Never yours.
+- **The pit wall** (`ui/pitWall.ts`, rules in `config/race.ts` `PIT_WALL`). In a career race your other car is an AI, and you run it from the pit wall at the right of the screen: its position and the gap ahead, its tyres (kind, laps on them, life left against the laps to go) and the calls.
+  - *Box, box* (B, or the button): it comes in next time past the pit entry for the tyres you choose with the chips (S / M / H / W). Until you pick, they follow the strategy's suggestion for the laps left and the weather. Press again to cancel; picking other tyres after the call changes the call.
+  - *Pace* (J cycles, or the buttons): **Push** (1 % quicker, tyres wear 30 % faster), **Normal**, or **Save tyres** (1.5 % slower, 28 % less wear). The tyre life shown follows the mode.
+  - Your race engineer talks on the radio under it: the teammate's tyres nearly gone, rain coming (wets) or the track drying (slicks), and a car just ahead or behind going in for the undercut. Each call once.
+  - The AI still makes its own stops when you don't call it in.
 - **When your race is over** (finished, or broken down) the rest of the field races on to the flag, fast-forward, seen from the car in front, because every car's result counts for the standings. *Results* (Enter) cuts it short: everyone still racing is placed as they stand.
 - **Points** are the real ones: 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 for the top ten. A car that retires scores nothing.
   - *Drivers' championship:* the most points; level on points, the most wins, then the most 2nd places, and so on.
@@ -600,7 +627,7 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
 - **Commercial operations:** choose Atlas Systems ($1m per race + $35k per team point), Vector Energy ($700k + $45k per point + $450k when the team scores at least 10 points), or Meridian Group ($1.3m + $15k per point). Contracts lock after the season’s first race and reopen next season. Headquarters income is additional. The Finance tab tracks funds, lifetime income and investments, and the latest 20 transactions. Existing owner saves retain the Atlas payout scheme and migrate without losing active projects.
 - **Owner season records:** history follows the highest-placed driver on your team, independently of who you selected to control. The season objective is set when you take ownership and refreshed at the start of the next season.
 - **Migration:** opening an old driver career converts its player seat to the team’s second named driver, retaining all results, retirements, fastest laps, poles, the saved grid and past seasons. It does not reset the championship.
-- **Tests:** `tests/owner.test.ts` (budgets, development, switching drivers, migration and save validation), `tests/career.test.ts` (the rules), `tests/careerUI.test.ts` (the screen, start to season's end) and `tests/retire.test.ts` (breakdowns, the flag, the order).
+- **Tests:** `tests/pitWall.test.ts` (pace modes against lap time and tyre wear, a box call for chosen tyres, the panel), `tests/carDevelopment.test.ts` (one scale, rival development, the development race, circuits), `tests/owner.test.ts` (budgets, development, switching drivers, migration and save validation), `tests/career.test.ts` (the rules), `tests/careerUI.test.ts` (the screen, start to season's end) and `tests/retire.test.ts` (breakdowns, the flag, the order).
 
 ### Create your own team
 
@@ -699,6 +726,8 @@ Tested against the real SDK in its `local` mode (localhost): the SDK's own log s
 - [x] Editor: bridges or tunnels where the track crosses itself, and lifting every level crossing
 - [x] Damage (wing and bodywork, mended in the pit box), yellow flags and the safety car
 - [x] A real pit lane: ramps off and back on, a pit wall, a box for each car, and a 60 km/h limiter
+- [x] Career pit wall: box calls and push / normal / save pace for your teammate, with race-engineer radio
+- [x] Race replays: highlights or the whole race, TV / chase / onboard / helicopter cameras
 
 ## Validation for the track editor
 
