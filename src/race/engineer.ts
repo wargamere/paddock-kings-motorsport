@@ -1,6 +1,7 @@
 import { CONDITIONS, DAMAGE, ENGINEER, type Compound } from '../config/race.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { compoundsMet, pickCompound, ruleCompound, ruleStopDue, WET_FROM } from './strategy.ts';
+import type { Trait } from './personality.ts';
 
 /** A car next to you in the race, as your engineer sees it. */
 export interface EngineerCar {
@@ -11,6 +12,8 @@ export interface EngineerCar {
   gap: number | null;
   pitting: boolean;
   stops: number;
+  /** What the driver is known for (an AI's personality; none for player 2). */
+  traits?: readonly Trait[];
 }
 
 /** What your engineer knows of the race (taken from the race screen a few times a second). */
@@ -200,6 +203,13 @@ export class RaceEngineer {
     // Damage: one more hit could be the end.
     if (v.damage !== null && v.damage >= E.damageWarn) this.want(`fragile:${stint}`, R.fragile, true, now);
 
+    // A rival close ahead or behind for the first time: what to expect of them (their best-known trait).
+    for (const [side, c] of [['ahead', v.ahead], ['behind', v.behind]] as const) {
+      const trait = c?.traits?.find((t) => t !== 'rainMaster' && t !== 'poorInRain' ? true : (v.tyres?.wetness ?? 0) >= WET_FROM);
+      if (!c || !trait || c.gap === null || c.gap > E.rivalGap || v.lapsDone < 1) continue;
+      this.want(`rival:${c.id}`, fmt(STR.traits[trait][side], { name: c.name }), false, now);
+    }
+
     // Rivals pitting just ahead or behind: the undercut.
     if (t && !v.pitting && v.lapsLeft > 1.5) {
       const b = v.behind;
@@ -235,6 +245,11 @@ export class RaceEngineer {
     }
     this.lastAhead = v.ahead?.gap != null ? { id: v.ahead.id, gap: v.ahead.gap } : null;
     this.lastBehind = v.behind?.gap != null ? { id: v.behind.id, gap: v.behind.gap } : null;
+  }
+
+  /** Something to tell you from outside (a rival's mistake near you): said once per `key`, if there's room for it. */
+  note(key: string, text: string, now: number): void {
+    this.want(key, text, false, now);
   }
 
   /** Out of the box after a stop: where you are. */

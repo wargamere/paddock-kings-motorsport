@@ -70,13 +70,15 @@ src/
               replay.ts (recording a race, its moments and highlights),
               replayScreen.ts (watching it back with TV cameras),
               engineer.ts (your race engineer on the radio), drs.ts (DRS zones
-              and who may open the flap), knockout.ts (Q1, Q2 and Q3)
+              and who may open the flap), knockout.ts (Q1, Q2 and Q3),
+              personality.ts (AI drivers' characters and mistakes)
   ui/         dom helpers, menuScreen.ts (main menu), setupPanel.ts (car setup), raceSetupScreen.ts (race
               setup), assistsPanel.ts, conditionsPanel.ts (rain, time of day,
               tyre wear), controlsPanel.ts (key bindings), gridOverlay.ts (grid after qualifying), editor overlay, HUD,
               minimap, pause menu, touch controls,
               libraryScreen.ts (track library), careerScreen.ts (the career's
               paddock), radio.ts (your race engineer's messages),
+              playerHud.ts (player 2's HUD in split screen),
               shareDialog.ts, style.css
   audio/      audio.ts (synthesised engine, tyre squeal, grass rumble, rain, beeps)
   platform/   platform.ts (PLATFORM flag + CAPS), services.ts (what the game calls:
@@ -126,6 +128,7 @@ Physics runs at a fixed 120 Hz from an accumulator (`core/fixedStep.ts`), and re
 | Pause | Esc / P | Start | Ⅱ button |
 | Timing tower (full / compact / hidden) | T | — | tap it (full / compact) |
 | Overtake boost (a race with AI cars; hold) | Space | B | BOOST button |
+| Split screen, player 2: drive, brake, steer / boost / reset | ← ↑ → ↓ / Right Shift / `/` | their own gamepad | — |
 
 **Your own keys** (`car/bindings.ts`, `ui/controlsPanel.ts`). The keyboard keys above are the defaults. ⌨ Controls, in the main menu and the pause menu, changes them: every driving action (drive, brake, steer left and right, gear up and down, reset, camera, pause, sound, timing tower) has two keys. Click one and press the new key; Esc cancels and Backspace clears it. A key already used by another action moves over, and the panel says from where. Reset to defaults puts them all back. Esc always pauses whatever you set, and Tab, Ctrl, Alt and the system keys can't be bound. Keys are physical keys (`KeyboardEvent.code`), shown as your keyboard layout prints them where the browser can say (Z for W on AZERTY). The race's controls hint, the pause menu and the assists panel all show your keys. The gamepad and touch controls don't change.
 
@@ -448,6 +451,18 @@ Tried and dropped, as they made racing worse:
 
 Lap times against AI cars count for bests, the ghost, medals and the score as usual.
 
+### AI drivers' characters
+
+Every AI driver has a character (`race/personality.ts`, numbers in `config/race.ts` `PERSONALITY`), the same every race: from their name in a single race, their id in the career. Four things, each from a seeded roll:
+
+- **Style**, aggressive to defensive. Aggressive drivers push harder chasing a car (+0.4 % pace within 30 m), brake later when one's just ahead, use the boost from further back and keep less battery in hand. Defensive drivers go quicker with a car close behind (+0.3 %) and defend with the boost from further back.
+- **Rain skill:** up to 1.5 % quicker or slower on a soaked road.
+- **Tyre care:** tyres last up to 15 % longer or shorter (`CarPhysics.wearRate`; the tyre life the strategy and the timing tower see follows it).
+- **Consistency:** how often they make **mistakes**. On its own seeded dice (the same race twice is the same), each time it starts braking hard it may lock up (no brakes for 0.7 s: it runs deep, often off; smoke from the front tyres), each time it turns in it may run wide (less steering for 1.3 s), and powering out of a bend it may spin (a yaw kick, the throttle cut for 2.2 s). A lock-up costs about half a second, running wide 0.3 s, a spin about 2 s. Mistakes are more likely under pressure (a car within 15 m behind), on worn tyres, in the wet, damaged and for aggressive drivers; never on the first 300 m, under a flag or in the pit lane. About 15–25 in a six-lap race of eleven AI cars.
+- About a quarter of drivers are past either end of each scale, and that's a **trait**: Aggressive ⚔, Defensive 🛡, Rain master ☔, Struggles in the wet 💧, Easy on tyres 🛞, Hard on tyres 🔥, Erratic ⚡, Consistent ⏱. The best-known one is shown as an icon in the timing tower and as a tag on the grid after qualifying.
+- **Your race engineer** tells you about a rival the first time they're within a second of you, ahead or behind (*Esme behind is aggressive on the brakes: cover the inside*; rain traits only in the wet), and about a mistake within 250 m of you (*Cleo has spun!*).
+- **Tests:** `tests/personality.test.ts` (the same character every time, the spread of traits, rain skill and tyre care on track, no change without a personality, mistakes repeatable and costly, split-screen keys).
+
 ### Races
 
 **Track limits.** Kerbs count as track; the grass, gravel or tarmac beyond them doesn't. If the whole car goes past the edge (both wheel tracks, with 25 cm of grace) for more than 0.12 s, the lap you're on is invalid. "Track limits!" flashes, and the timer turns red and struck through until the next lap. An invalid lap still counts towards a race's distance, but never for the best lap, the ghost, medals or the score. The results screen marks those laps ✗. A run with no clean lap scores nothing. Practice uses the same rule.
@@ -567,6 +582,15 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
     - A part coming off leaves bits of car on the road (in its paint and dark trim), which bounce, slide and lie there for 14 s. So does a hard hit (over 12 m/s); any hit over 4 m/s sparks.
     - From 45 % damage the car smokes, more the worse it gets; once it's broken down, black smoke. Sliding hard smokes the tyres (worn-out tyres sooner).
     - All of it is three draw calls (two pools of point sprites and one of little boxes), whatever the field. Smoke right in front of the camera fades and bits of car within 2.5 m aren't drawn, so neither fills the screen.
+
+### Split screen: two players
+
+Race setup → *Players: 2* (a single race; not the career). The screen splits: player 1 on the top half with the full HUD, player 2 on the bottom half with a HUD of their own (`ui/playerHud.ts`: who, position, lap and lap time, speed and gear, tyres, damage, DRS and the boost, the flag, their lap times and their result). `render/view3d.ts` draws the scene twice a frame, once per camera, each into its half (`renderSplit`).
+
+- **Controls** (`splitMaps` in `car/bindings.ts`): on one keyboard player 1 has W A S D (the first key of drive, brake and steer) and every other key (Space boost, R reset, C camera, …); player 2 has the second keys (the arrows by default), Right Shift for the boost and / to reset. Gamepads are shared out: two connected, one each; one, it's player 2's (player 1 has the keyboard). Esc or Start on either pauses.
+- **Player 2's car** takes a seat in the field (the cars count AI cars plus both of you), in a colour of its own, and races as a car of its own: the AI cars race it as they race you, it has DRS, the boost, tyre wear, damage and pit stops (drive into its box and the crew fits the tyres that last the rest of the race), the safety car and the pit limiter hold it, and the assists you've chosen help it too, with an automatic gearbox. It's in the timing tower, the minimap, the replay and the results as *Player 2*.
+- **The grid:** *Pick your slot* puts player 2 right behind you; *Random* draws both; *Qualifying* (a session alone) becomes a random grid.
+- **The finish:** the results wait until both of you have finished (or broken down).
 
 ### DRS and the overtake boost
 
@@ -762,6 +786,8 @@ Tested against the real SDK in its `local` mode (localhost): the SDK's own log s
 - [x] A real F1 weekend in the career: knockout qualifying, sprint weekends, the two-compound rule
 - [x] DRS zones and an overtake boost, for you and the AI
 - [x] Damage you can see: hanging bumpers, missing wings, smoke, sparks and bits of car
+- [x] Split-screen two-player races
+- [x] AI drivers' characters (aggressive, defensive, rain masters, tyre care) and mistakes (lock-ups, running wide, spins)
 
 ## Validation for the track editor
 

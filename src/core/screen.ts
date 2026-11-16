@@ -44,6 +44,8 @@ export interface RaceSetup {
   damage: boolean;
   /** A stuck car brings out the safety car (yellow flags are always on in a race). */
   safetyCar: boolean;
+  /** Split screen: two players (a race only; missing in older saves: one). */
+  players?: 1 | 2;
 }
 
 /** An AI car in a championship round. */

@@ -201,6 +201,8 @@ export class CarPhysics {
   /** Laps driven on these tyres, and the share of their life used (sliding uses it faster; 1 = they've gone off). */
   tyreAge = 0;
   tyreUse = 0;
+  /** How fast the tyres wear against the standard (an AI driver's tyre care: easy on them below 1). */
+  wearRate = 1;
   /** The kinds of tyre this car has run this race, in order (for the two-compound rule). */
   tyresUsed: Compound[] = [];
   /** Wing, gears and brake balance (see SETUP); the default is the car as it always was. */
@@ -281,7 +283,7 @@ export class CarPhysics {
 
   /** Laps the tyres have left before they go off, on the road as it is now. */
   get tyreLapsLeft(): number {
-    return this.tyreLeft * this.tyreLife;
+    return (this.tyreLeft * this.tyreLife) / this.wearRate;
   }
 
   /** The tyres' grip now, as a share of the road's: their kind, how wet the road is, and their wear. */
@@ -490,7 +492,7 @@ export class CarPhysics {
       const T = TYRES;
       const laps = (Math.abs(vf) * dt) / this.track.center.length;
       this.tyreAge += laps;
-      this.tyreUse += (laps * (1 + T.slideWear * Math.max(0, st.slip - T.slideFrom))) / this.tyreLife;
+      this.tyreUse += (this.wearRate * laps * (1 + T.slideWear * Math.max(0, st.slip - T.slideFrom))) / this.tyreLife;
     }
   }
 

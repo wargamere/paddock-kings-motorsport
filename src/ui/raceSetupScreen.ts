@@ -37,6 +37,8 @@ export class RaceSetupScreen implements Screen {
   private readonly diffHint: HTMLElement;
   private readonly gridChoice: Choice<GridKind>;
   private readonly gridHint: HTMLElement;
+  private readonly playersChoice: Choice<1 | 2>;
+  private readonly playersHint: HTMLElement;
   private readonly slotSlider: Slider;
   private readonly raceOnly: HTMLElement[];
   /** Rows only for a race with AI cars. */
@@ -98,6 +100,16 @@ export class RaceSetupScreen implements Screen {
     });
     const laps = field(S.laps, this.lapsSlider.el);
     const cars = field(S.cars, this.carsSlider.el, this.carsHint);
+    // Split screen: a second player on the same screen.
+    this.playersChoice = segmented<1 | 2>(
+      [
+        [1, S.playersOne, '👤'],
+        [2, S.playersTwo, '👥'],
+      ],
+      (n) => this.set({ players: n }),
+    );
+    this.playersHint = h('p', { class: 'setup-hint' });
+    const players = field(S.players, this.playersChoice.el, this.playersHint);
     const diff = field(S.difficulty, this.diffSlider.el, this.diffHint);
     const grid = field(S.grid, this.gridChoice.el, this.gridHint);
     this.slotRow = field(S.startSlot, this.slotSlider.el);
@@ -125,7 +137,7 @@ export class RaceSetupScreen implements Screen {
       this.setupLine,
       button(STR.carSetup.open, () => this.openSetupPanel(), { icon: '🔧', class: 'compact', key: 'G' }),
     );
-    this.raceOnly = [laps, cars];
+    this.raceOnly = [laps, cars, players];
     this.withAi = [diff, grid];
     this.panel = h(
       'div',
@@ -136,7 +148,7 @@ export class RaceSetupScreen implements Screen {
         'div',
         { class: 'setup-cols' },
         h('div', { class: 'setup-col' }, field(S.mode, this.modeChoice.el, this.modeHint), laps, field(S.ghost, this.ghostChoice.el, this.ghostHint)),
-        h('div', { class: 'setup-col race-col' }, cars, diff, grid, this.slotRow),
+        h('div', { class: 'setup-col race-col' }, players, cars, diff, grid, this.slotRow),
       ),
       assists,
       conditions,
@@ -263,6 +275,7 @@ export class RaceSetupScreen implements Screen {
     this.carsSlider.set(d.opponents + 1);
     this.diffSlider.set(d.difficulty);
     this.gridChoice.set(d.grid);
+    this.playersChoice.set(d.players ?? 1);
     this.slotSlider.setRange(1, Math.max(2, d.opponents + 1));
     this.slotSlider.set(d.startSlot);
     this.renderHints();
@@ -278,6 +291,7 @@ export class RaceSetupScreen implements Screen {
     for (const el of this.withAi) el.hidden = !ai;
     this.slotRow.hidden = !ai || d.grid !== 'pick';
     this.panel.classList.toggle('one-col', !race);
+    this.playersHint.textContent = d.players === 2 ? S.playersHintTwo : S.playersHintOne;
     this.carsHint.textContent = d.opponents === 0 ? S.carsSoloHint : d.opponents === 1 ? S.carsHintOne : fmt(S.carsHint, { n: d.opponents });
     const hasGhost = !!this.game.records.get(this.game.track.def.id).ghost;
     this.ghostHint.textContent = hasGhost ? S.ghostHint : S.ghostNone;

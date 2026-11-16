@@ -386,6 +386,24 @@ export const STR = {
     },
   },
 
+  /** AI drivers' personalities (race/personality.ts): each trait's icon, name, and what your engineer says of a driver with it just ahead or behind. */
+  traits: {
+    aggressive: { icon: '⚔', name: 'Aggressive', ahead: '{name} ahead is aggressive: give them room into the corners.', behind: '{name} behind is aggressive on the brakes: cover the inside.' },
+    defensive: { icon: '🛡', name: 'Defensive', ahead: '{name} ahead defends hard: line them up on the straight.', behind: '{name} behind is careful: they won’t risk a dive.' },
+    rainMaster: { icon: '☔', name: 'Rain master', ahead: '{name} ahead is quick in the wet.', behind: '{name} behind is quick in the wet: they’ll be coming.' },
+    poorInRain: { icon: '💧', name: 'Struggles in the wet', ahead: '{name} ahead struggles in the wet: they’re there for the taking.', behind: '{name} behind struggles in the wet.' },
+    tyreWhisperer: { icon: '🛞', name: 'Easy on tyres', ahead: '{name} ahead is easy on the tyres: expect a long stint.', behind: '{name} behind is easy on the tyres: expect a long stint.' },
+    hardOnTyres: { icon: '🔥', name: 'Hard on tyres', ahead: '{name} ahead is hard on the tyres: they’ll fade, be patient.', behind: '{name} behind is hard on the tyres: they’ll fade.' },
+    erratic: { icon: '⚡', name: 'Erratic', ahead: '{name} ahead makes mistakes under pressure: stay close.', behind: '{name} behind makes mistakes under pressure.' },
+    metronome: { icon: '⏱', name: 'Consistent', ahead: '{name} ahead rarely makes a mistake: you’ll have to pass them.', behind: '{name} behind rarely makes a mistake: don’t give them a chance.' },
+  },
+  /** An AI driver's mistake near you (your engineer says). */
+  mistakes: {
+    lockup: '{name} locked up!',
+    wide: '{name} ran wide!',
+    spin: '{name} has spun!',
+  },
+
   /** Your race engineer on the radio (race/engineer.ts, ui/radio.ts). */
   engineer: {
     label: 'Race engineer',
@@ -724,6 +742,11 @@ export const STR = {
     carsHint: 'You and {n} AI cars.',
     carsHintOne: 'You and 1 AI car.',
     carsSoloHint: 'No AI cars: a time trial against the clock (and your ghost).',
+    players: 'Players',
+    playersOne: '1 player',
+    playersTwo: '2 players',
+    playersHintOne: 'Just you.',
+    playersHintTwo: 'Split screen. Player 1: W A S D, Space boost, R reset (or a gamepad). Player 2: the arrow keys, Right Shift boost, / reset (or a gamepad: with one connected, it’s player 2’s). Qualifying becomes a random grid.',
     grid: 'Grid',
     gridQualifying: 'Qualifying',
     gridRandom: 'Random',
@@ -903,6 +926,18 @@ export const STR = {
     missedCheckpoint: 'Missed a checkpoint! This lap’s time won’t count',
     trackInfo: '{name} · {len} m',
     speedUnit: 'km/h',
+    /** Split screen. */
+    player1: 'Player 1',
+    player2: 'Player 2',
+    p2Tag: 'P2',
+    p2BoostKey: 'R-Shift',
+    tyresShort: 'TYRES',
+    damageShort: 'DAMAGE',
+    p2Pit: 'Pit stop: {tyres} tyres',
+    p2Finished: 'Finished {pos}!',
+    p2Out: 'Broken down: out of the race',
+    p2Waiting: 'Player 2 is still racing…',
+    hintSplit: 'Player 1 (top): W A S D drive, Space boost, R reset, C camera · Player 2 (bottom): arrow keys, Right Shift boost, / reset · or a gamepad each · Esc pause',
     speedUnitMph: 'mph',
     paused: 'Paused',
     /** The keyboard hint is built from your keys: "W/↑ drive · S/↓ brake & reverse · …". */

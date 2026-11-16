@@ -1,16 +1,16 @@
-import { type Mesh, type PerspectiveCamera, Vector3 } from 'three';
+import { type Mesh, PerspectiveCamera, Vector3 } from 'three';
 import { audio } from '../audio/audio.ts';
 import { CameraRig } from '../car/camera.ts';
 import { collideCars } from '../car/contact.ts';
 import { carriedTow, slipstream } from '../car/slipstream.ts';
 import { keyboardHint, keysText } from '../car/bindings.ts';
-import { InputManager, type InputAction } from '../car/input.ts';
+import { connectedPads, InputManager, type InputAction } from '../car/input.ts';
 import { CarModel } from '../car/model.ts';
 import { currentPaintHex, recordFinishedRun } from '../car/paint.ts';
 import { CarPhysics, CarState, lerpState, NO_INPUT, STANDARD_CAR, type DriveInput } from '../car/physics.ts';
 import { HANDLING } from '../config/handling.ts';
 import { AI_PAINTS, PAINTS } from '../config/paint.ts';
-import { AI, CONDITIONS, DAMAGE, DRS, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, DRS, ENGINEER, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
 import { compoundLife } from '../car/tyres.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { FixedStep } from '../core/fixedStep.ts';
@@ -36,7 +36,10 @@ import { TouchControls } from '../ui/touchControls.ts';
 import { GridOverlay, type GridEntry } from '../ui/gridOverlay.ts';
 import { knockoutGrid, knockoutOut, knockoutSession, trackEvolution } from './knockout.ts';
 import { DrsControl } from './drs.ts';
+import { personalityFor, traits, type MistakeKind, type Trait } from './personality.ts';
 import { RaceEffects } from '../render/effects.ts';
+import { PlayerHud } from '../ui/playerHud.ts';
+import { aiCars } from './traffic.ts';
 import { carEffects } from '../render/carEffects.ts';
 import { AiDriver, aiField, aiPace, gridOrder, gridPlace, qualifyingOrder, YOU } from './ai.ts';
 import { RacingDriver } from './driver.ts';
@@ -47,7 +50,7 @@ import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
 import { applyAssists, assistDriver } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
-import { compoundsMet, pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
+import { compoundsMet, pickCompound, pitLoss, suggestedSetup, trackLapTime, trackTyreLife, WET_FROM } from './strategy.ts';
 import { RaceEngineer, type EngineerCar, type EngineerView } from './engineer.ts';
 import { Radio } from '../ui/radio.ts';
 import { REPLAY } from '../config/replay.ts';
@@ -88,6 +91,8 @@ interface Opponent {
   outFor: number;
   /** Its livery's second colour, if it has one (for the replay). */
   secondary?: number;
+  /** What its driver is known for (none: player 2). */
+  traits: Trait[];
 }
 
 /** A car of the field: an AI's name, colour and pace, and in a championship who it is, its pit box and its luck. */
@@ -139,6 +144,22 @@ export class RaceScreen implements Screen {
   private readonly touch: TouchControls;
   private readonly fixed = new FixedStep(HANDLING.tickRate);
   private readonly rig = new CameraRig();
+  /**
+   * Split screen (a race for two): player 2's car (an AI car's seat, driven by
+   * their own controls), its camera (the bottom half of the screen), its HUD
+   * and input, the tyres for its next stop.
+   */
+  private p2: Opponent | null = null;
+  private readonly rig2 = new CameraRig();
+  private readonly cam2 = new PerspectiveCamera(62, 1, 0.3, 2400);
+  private readonly hud2 = new PlayerHud();
+  private readonly input2 = new InputManager();
+  private readonly p2Input: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  private p2Tyres: Compound = 'medium';
+  /** Player 2's laps seen, what's been said of the end of their race, and whether you're waiting for them. */
+  private p2Laps = 0;
+  private p2Said = '';
+  private p2Waiting = false;
   private readonly model: CarModel | null;
   private readonly ghostModel: CarModel | null;
   /** AI cars: one model and name tag per possible opponent, reused between runs. */
@@ -345,6 +366,7 @@ export class RaceScreen implements Screen {
       this.carTrack = t;
       const terrain = surfaceFor(t).terrain;
       this.rig.groundAt = (x, z) => terrainHeight(terrain, x, z);
+      this.rig2.groundAt = this.rig.groundAt;
     }
     const touch = prefersTouchControls(platform.deviceType());
     this.hud.setTouchLayout(touch);
@@ -384,6 +406,11 @@ export class RaceScreen implements Screen {
   exit(): void {
     this.fx?.clear();
     this.input.detach();
+    this.input2.detach();
+    this.input.player = 'solo';
+    this.p2 = null;
+    this.hud2.root.remove();
+    this.hud.root.classList.remove('split');
     this.touch.release();
     this.abort?.abort();
     this.abort = null;
@@ -461,9 +488,22 @@ export class RaceScreen implements Screen {
       return;
     }
     const setup = this.game.setup;
-    const ai = setup.mode === 'race' ? Math.min(setup.opponents, this.aiModels.length) : 0;
-    if (ai > 0 && setup.grid === 'qualifying') this.startQualifying();
+    // Split screen: player 2 takes a seat of its own in the field (no qualifying: a random grid).
+    const two = setup.mode === 'race' && setup.players === 2;
+    const ai = setup.mode === 'race' ? Math.min(setup.opponents, this.aiModels.length - (two ? 1 : 0)) : 0;
+    if (two) this.startRace(this.twoPlayerGrid(ai));
+    else if (ai > 0 && setup.grid === 'qualifying') this.startQualifying();
     else this.startRace(ai > 0 ? gridOrder(setup.grid, ai, setup.startSlot) : [YOU]);
+  }
+
+  /** The grid for two players and `ai` AI cars: player 2 is car `ai`, beside you when you pick your slot. */
+  private twoPlayerGrid(ai: number): number[] {
+    const setup = this.game.setup;
+    const order = gridOrder(setup.grid === 'qualifying' ? 'random' : setup.grid, ai + 1, setup.startSlot);
+    if (setup.grid !== 'pick') return order;
+    order.splice(order.indexOf(ai), 1);
+    order.splice(order.indexOf(YOU) + 1, 0, ai);
+    return order;
   }
 
   /** A championship grid (driver ids, pole first) as car ids by slot; anyone it leaves out starts at the back, you last. */
@@ -487,7 +527,13 @@ export class RaceScreen implements Screen {
   }
 
   private get myName(): string {
-    return this.game.event?.you.name ?? STR.results.you;
+    return this.game.event?.you.name ?? (this.twoPlayers ? STR.race.player1 : STR.results.you);
+  }
+
+  /** Split screen: a single race (not a championship round) for two players. */
+  private get twoPlayers(): boolean {
+    const s = this.game.setup;
+    return !this.game.event && s.mode === 'race' && s.players === 2 && this.stage !== 'qualifying';
   }
 
   /** Whose pit box is yours (see pitBox). */
@@ -625,7 +671,106 @@ export class RaceScreen implements Screen {
     this.hud.setMode(setup.mode);
     this.pauseMenu.setMode(setup.mode);
     this.rig.snap(car.state);
+    this.setupSplit();
     if (practice) this.hud.flash(STR.race.practiceGo, 'info', 1.8);
+  }
+
+  /** Split screen on (a race for two) or off: the inputs, the HUDs, player 2's camera. */
+  private setupSplit(): void {
+    const p2 = this.p2;
+    this.input.player = p2 ? 'p1' : 'solo';
+    this.input2.player = 'p2';
+    this.hud.root.classList.toggle('split', !!p2);
+    this.p2Laps = 0;
+    this.p2Said = '';
+    this.p2Waiting = false;
+    if (!p2) {
+      this.hud2.root.remove();
+      this.input2.detach();
+      return;
+    }
+    if (!this.hud2.root.isConnected) this.game.ui.insertBefore(this.hud2.root, this.gridOverlay.root);
+    this.hud2.clear();
+    this.input2.attach();
+    this.input2.onAction = (a) => this.onP2Action(a);
+    this.p2Tyres = p2.ai.car.compound;
+    this.rig2.snap(p2.ai.car.state);
+  }
+
+  /** Player 2's own actions: reset the car, change the camera, pause. */
+  private onP2Action(a: InputAction): void {
+    if (this.stage !== 'run' || this.assistsPanel.isOpen || this.controlsPanel.isOpen) return;
+    if (a === 'pause') this.setPaused(!this.paused);
+    else if (this.paused) return;
+    else if (a === 'camera') this.rig2.toggle();
+    else if (a === 'reset') {
+      const p2 = this.p2;
+      const s = p2?.ai.session;
+      if (!p2 || !s?.canDrive || s.retired || s.phase === 'finished') return;
+      p2.ai.car.resetToRoad();
+      p2.ai.crew?.reset(p2.ai.car.state);
+      this.drs?.forget(this.opponents.indexOf(p2) + 1);
+      this.rig2.snap(p2.ai.car.state);
+    }
+  }
+
+  /**
+   * Player 2's input for one tick: their controls (with your assists), held
+   * to the safety car and the pit limiter, and their pit stop: driving into
+   * their box, the crew fits the tyres that last the rest of the race.
+   */
+  private driveP2(o: Opponent, dt: number): DriveInput {
+    const ai = o.ai, car = ai.car, s = ai.session, st = car.state;
+    if (!s.canDrive || s.retired) return NO_INPUT;
+    if (s.phase === 'finished') return BRAKE;
+    let inp = applyAssists(this.game.track, st, this.input2.sample(this.p2Input), settings().assists, this.wet, car.tune, car.setup);
+    inp.boost = this.p2Input.boost;
+    if (Number.isFinite(ai.raceCap) && st.speed > ai.raceCap) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, st.speed > ai.raceCap + 3 ? 0.4 : 0) };
+    if (st.inPits && st.speed > PIT_LANE.limit) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, st.speed > PIT_LANE.limit + 2 ? 0.5 : 0) };
+    const crew = ai.crew;
+    if (crew && s.phase === 'racing') {
+      const ev = crew.step(car, dt, this.p2Tyres);
+      if (ev === 'start' && car.wear) {
+        const left = Math.max(1, s.lapsToRun - s.laps.length);
+        this.p2Tyres = pickCompound(left, car.mediumLife, car.wetness >= WET_FROM ? 1 : 0, car.compound);
+        this.hud2.flash(fmt(STR.race.p2Pit, { tyres: STR.tyres.names[this.p2Tyres] }), crew.service);
+      }
+    }
+    return crew?.busy ? HOLD : inp;
+  }
+
+  /** Split screen: player 2's HUD, and what's happened to them (laps, the flag, a breakdown). */
+  private updateP2Hud(alpha: number, order: Entry[]): void {
+    const p2 = this.p2;
+    if (!p2) return;
+    const idx = this.opponents.indexOf(p2) + 1;
+    const s = p2.ai.session, car = p2.ai.car, R = STR.race;
+    const pos = order.findIndex((e) => e.idx === idx) + 1;
+    // Laps done, the flag, out of the race: said once each.
+    if (s.laps.length > this.p2Laps) {
+      this.p2Laps = s.laps.length;
+      const t = s.laps[s.laps.length - 1];
+      if (s.phase !== 'finished') this.hud2.flash(fmt(R.lapTime, { n: s.laps.length, time: formatTime(t) }), 2);
+    }
+    const said = s.retired ? 'out' : s.phase === 'finished' ? 'finished' : '';
+    if (said && said !== this.p2Said) {
+      this.p2Said = said;
+      this.hud2.flash(said === 'out' ? R.p2Out : fmt(R.p2Finished, { pos: STR.results.ordinals[pos - 1] ?? String(pos) }), 1e9);
+    }
+    const control = this.control;
+    const flag = control?.sc === 'out' ? R.safetyCar : control?.sc === 'in' ? R.safetyCarInBanner : car.state.inPits ? fmt(R.pitLimiter, { n: Math.round(PIT_LANE.limit * 3.6) }) : control && control.yellowAt(car.state.s) ? R.yellowFlag : null;
+    const drs = this.drs;
+    this.hud2.update({
+      pos: `P${pos}/${order.length}`,
+      lap: fmt(R.lap, { n: Math.min(s.laps.length + 1, s.lapsToRun), total: s.lapsToRun }),
+      time: formatTime(s.lapTime(alpha) ?? 0),
+      speed: p2.view.speed,
+      gear: car.state.gear,
+      tyres: car.wear ? car.tyreLeft : null,
+      damage: car.damageOn ? car.damage : null,
+      power: drs ? { drs: car.drs ? 'open' : drs.armed(idx) ? 'armed' : 'off', battery: car.ers, boosting: car.boosting } : null,
+      flag,
+    });
   }
 
   /**
@@ -705,7 +850,7 @@ export class RaceScreen implements Screen {
     this.qSessions.push(res);
     for (const [k, t] of times) this.qBest.set(k, t);
     const entry = (k: number, out: boolean): GridEntry =>
-      k === YOU ? { name: this.myName, paint: this.myPaint, time: times.get(YOU) ?? null, you: true, out } : { name: field[k].name, paint: field[k].paint, time: times.get(k) ?? null, you: false, out };
+      k === YOU ? { name: this.myName, paint: this.myPaint, time: times.get(YOU) ?? null, you: true, out } : { name: field[k].name, paint: field[k].paint, time: times.get(k) ?? null, you: false, out, trait: this.traitTag(field[k]) };
     if (part < 3 && !res.out.includes(YOU)) {
       // Through: the classification, and on to the next session.
       this.qIn = res.through;
@@ -766,7 +911,7 @@ export class RaceScreen implements Screen {
     const entries: GridEntry[] = order.map((id) =>
       id === YOU
         ? { name: this.myName, paint: this.myPaint, time: times.get(YOU) ?? null, you: true }
-        : { name: field[id].name, paint: field[id].paint, time: times.get(id) ?? null, you: false },
+        : { name: field[id].name, paint: field[id].paint, time: times.get(id) ?? null, you: false, trait: this.traitTag(field[id]) },
     );
     // A championship keeps the grid (so the race can be run later, or again).
     const ev = this.game.event;
@@ -795,33 +940,69 @@ export class RaceScreen implements Screen {
     const ev = this.game.event;
     if (ev) return ev.field.slice(0, Math.min(count, this.aiModels.length));
     const mine = currentPaintHex();
-    const paints = [...PAINTS.map((p) => p.hex), ...AI_PAINTS].filter((hex) => hex !== mine);
-    return aiField(Math.min(count, this.aiModels.length), this.game.setup.difficulty, paints, STR.ai.names);
+    const all = [...PAINTS.map((p) => p.hex), ...AI_PAINTS].filter((hex) => hex !== mine);
+    // Split screen: the last car is player 2's, in a colour of its own.
+    if (this.twoPlayers) {
+      const p2 = all[0];
+      const ai = aiField(Math.min(count, this.aiModels.length) - 1, this.game.setup.difficulty, all.slice(1), STR.ai.names);
+      return [...ai, { name: STR.race.player2, paint: p2, difficulty: this.game.setup.difficulty / 100 }];
+    }
+    return aiField(Math.min(count, this.aiModels.length), this.game.setup.difficulty, all, STR.ai.names);
   }
 
   /** AI cars in their grid slots (from `order`; the field is listed fastest first). */
   private startOpponents(order: number[]): void {
     this.clearOpponents();
+    this.p2 = null;
     const t = this.game.track;
     const field = this.field(order.length - 1);
     const laps = this.game.setup.laps;
     field.forEach((f, k) => {
-      const ai = new AiDriver(t, { name: f.name, paint: f.paint, difficulty: f.difficulty, tune: f.tune, laps, slot: order.indexOf(k), box: f.box ?? k + 1, wet: this.wet, tyreWear: this.game.setup.tyreWear, damage: this.game.setup.damage, mediumLife: this.game.event?.tyreLife, twoCompounds: this.twoCompounds, ers: this.game.setup.mode === 'race' });
+      // Each AI driver's character (the same every race); player 2 has none: they drive themselves.
+      const human = this.twoPlayers && k === field.length - 1;
+      const personality = human ? undefined : personalityFor(f.id ?? f.name);
+      const ai = new AiDriver(t, { name: f.name, paint: f.paint, difficulty: f.difficulty, tune: f.tune, laps, slot: order.indexOf(k), box: f.box ?? k + 1, wet: this.wet, tyreWear: this.game.setup.tyreWear, damage: this.game.setup.damage, mediumLife: this.game.event?.tyreLife, twoCompounds: this.twoCompounds, ers: this.game.setup.mode === 'race', personality });
+      ai.onMistake = (kind) => this.onMistake(k + 1, kind);
       const model = this.aiModels[k];
       model.setPaint(f.paint, f.secondary);
       model.root.visible = true;
       const label = this.aiLabels[k];
       label.textContent = f.name;
       const failAt = f.failAt === undefined ? null : f.failAt * laps * t.center.length;
-      this.opponents.push({ id: f.id ?? String(k), ai, model, view: new CarState(), label, prev: { s: 0, lateral: 0, along: 0 }, failAt, outFor: 0, secondary: f.secondary });
+      this.opponents.push({ id: f.id ?? String(k), ai, model, view: new CarState(), label, prev: { s: 0, lateral: 0, along: 0 }, failAt, outFor: 0, secondary: f.secondary, traits: personality ? traits(personality) : [] });
     });
     this.radio.hide();
+    // Split screen: player 2 drives the last of them (it's no AI: the AI cars race it as they race you).
+    if (this.twoPlayers && this.opponents.length) {
+      const p2 = this.opponents[this.opponents.length - 1];
+      aiCars.delete(p2.ai.car.state);
+      p2.ai.car.gearbox = 'auto';
+      p2.label.textContent = STR.race.p2Tag;
+      this.p2 = p2;
+    }
   }
 
   private clearOpponents(): void {
     this.opponents = [];
     for (const m of this.aiModels) m.root.visible = false;
     for (const l of this.aiLabels) l.hidden = true;
+  }
+
+  /** An AI driver's best-known trait, for the grid ("⚔ Aggressive"; none: no trait). */
+  private traitTag(f: FieldCar): string | undefined {
+    const t = traits(personalityFor(f.id ?? f.name))[0];
+    return t ? `${STR.traits[t].icon} ${STR.traits[t].name}` : undefined;
+  }
+
+  /** An AI driver (car `idx`) made a mistake: near you, your engineer says so. */
+  private onMistake(idx: number, kind: MistakeKind): void {
+    const o = this.opponents[idx - 1];
+    const s = this.session;
+    if (!o || !s || !this.engineer || this.watching || this.stage !== 'run' || this.gone[0]) return;
+    const L = this.game.track.center.length;
+    const ds = Math.abs(((o.ai.car.state.s - this.car!.state.s + L * 1.5) % L) - L / 2);
+    if (ds > ENGINEER.mistakeNear) return;
+    this.engineer.note(`mistake:${idx}:${o.ai.session.laps.length}:${kind}`, fmt(STR.mistakes[kind], { name: o.ai.name }), s.time() - s.goTime);
   }
 
   /** The cars on the track (`live`, and their states for traffic, slipstream and contact): everyone not taken off it. */
@@ -868,6 +1049,7 @@ export class RaceScreen implements Screen {
     const d = this.input.lastDevice;
     const manual = settings().assists.gears === 'manual';
     const boost = !!this.drs;
+    if (this.p2) return STR.race.hintSplit;
     if (d === 'touch') return STR.race.hintTouch + (manual ? STR.race.hintGearsTouch : '') + (boost ? STR.race.hintBoostTouch : '');
     const practice = this.game.mode === 'practice';
     if (d === 'gamepad') return STR.race.hintGamepad + (manual ? STR.race.hintGearsGamepad : '') + (boost ? STR.race.hintBoostGamepad : '') + (practice ? STR.race.hintRestartGamepad : '');
@@ -931,6 +1113,7 @@ export class RaceScreen implements Screen {
     if (p === this.paused) return;
     this.paused = p;
     this.input.clear();
+    this.input2.clear();
     this.touch.release();
     audio.setEngine(!p);
     this.pauseMenu.setSound(!audio.silent);
@@ -1002,7 +1185,7 @@ export class RaceScreen implements Screen {
     this.opponents.forEach((o, k) => {
       if (this.gone[k + 1]) return;
       this.progress(o.ai.car, o.prev);
-      const ai = o.ai.drive(st, dt);
+      const ai = o === this.p2 ? this.driveP2(o, dt) : o.ai.drive(st, dt);
       o.ai.car.drs = this.drsOpen(k + 1, o.ai.car, ai);
       o.ai.car.step(ai);
       hits[k + 1] = o.ai.car.state.wallHit;
@@ -1556,7 +1739,9 @@ export class RaceScreen implements Screen {
     el.hidden = !visible;
     if (!visible) return;
     const s = this.game.surface;
-    el.style.transform = `translate(${((p.x + 1) / 2) * s.w}px, ${((1 - p.y) / 2) * s.h}px) translate(-50%, -100%)`;
+    // (Split screen: your view is the top half.)
+    const h = this.p2 ? s.h / 2 : s.h;
+    el.style.transform = `translate(${((p.x + 1) / 2) * s.w}px, ${((1 - p.y) / 2) * h}px) translate(-50%, -100%)`;
   }
 
   /** Shows the racing line ahead of the car (built for the track the first time it's needed). */
@@ -1607,7 +1792,8 @@ export class RaceScreen implements Screen {
       const phys = o ? o.ai.car : car;
       return {
         pos: i + 1,
-        name: e.name,
+        // (An AI driver's best-known trait, as an icon.)
+        name: o?.traits[0] ? `${e.name} ${STR.traits[o.traits[0]].icon}` : e.name,
         paint: e.paint,
         you: e.you,
         out: e.out,
@@ -1659,7 +1845,7 @@ export class RaceScreen implements Screen {
       if (!e || e.out || e.end !== null) return null;
       const o = this.opponents[e.idx - 1];
       const g = gaps.gap(e.idx, e.dist, 0, you.dist, now);
-      return { id: e.idx, name: e.name, gap: g === null ? null : Math.abs(g), pitting: !!o?.ai.pitting, stops: o?.ai.crew?.stops ?? 0 };
+      return { id: e.idx, name: e.name, gap: g === null ? null : Math.abs(g), pitting: !!o?.ai.pitting, stops: o?.ai.crew?.stops ?? 0, traits: o?.traits ?? [] };
     };
     const grid = this.grid.indexOf(YOU);
     return {
@@ -1813,6 +1999,13 @@ export class RaceScreen implements Screen {
     if (this.game.interrupted && !this.paused) this.setPaused(true);
     // Gameplay is "on" only while actually driving: not in the countdown, paused or finished.
     platform.setGameplay(session.phase === 'racing' && this.stage !== 'grid' && !this.paused && !this.game.interrupted);
+    // Split screen: the gamepads shared out (two: one each; one: player 2's, player 1 has the keyboard).
+    if (this.p2) {
+      const pads = connectedPads();
+      this.input.padSlot = pads >= 2 ? 0 : null;
+      this.input2.padSlot = pads >= 2 ? 1 : pads === 1 ? 0 : null;
+      this.input2.pollGamepad();
+    } else this.input.padSlot = 0;
     this.input.pollGamepad();
     let alpha = 1;
     /** Race time gone by this frame (s): more than the frame's own while fast-forwarding. */
@@ -1848,7 +2041,7 @@ export class RaceScreen implements Screen {
       const fdt = this.paused ? 0 : dt;
       if (fdt > 0) {
         if (!this.gone[0]) carEffects(fx, this.view, car, this.model, this.myPaint, this.fxHits[0], fdt);
-        this.opponents.forEach((o, k) => !this.gone[k + 1] && carEffects(fx, o.view, o.ai.car, o.model, o.ai.paint, this.fxHits[k + 1], fdt));
+        this.opponents.forEach((o, k) => !this.gone[k + 1] && carEffects(fx, o.view, o.ai.car, o.model, o.ai.paint, this.fxHits[k + 1], fdt, o.ai.mistake === 'lockup'));
         this.fxHits.fill(0);
       }
       fx.update(fdt, v.renderer.domElement.height / (2 * Math.tan((v.camera.fov * Math.PI) / 360)), v.camera.position);
@@ -1881,6 +2074,7 @@ export class RaceScreen implements Screen {
     this.hit = 0;
 
     this.rig.update(v.camera, focus, raced);
+    if (this.p2) this.rig2.update(this.cam2, this.p2.view, raced);
     this.placeLabel(this.ghostLabel, pose, this.ghostGround.y, v.camera, focus);
     this.placeSafetyCar();
     this.opponents.forEach((o, k) => !this.gone[k + 1] && this.placeLabel(o.label, o.view, o.view.y, v.camera, focus));
@@ -1888,13 +2082,15 @@ export class RaceScreen implements Screen {
       const order = this.standings();
       this.position = order.findIndex((e) => e.you) + 1;
       this.hud.setPosition(this.position, order.length);
+      this.updateP2Hud(alpha, order);
     }
     if (settings().minimap) {
       const others = this.opponents.filter((_, k) => !this.gone[k + 1]).map((o) => ({ x: o.view.x, z: o.view.z, color: hexColour(o.ai.paint) }));
       this.hud.minimap.draw(this.game.track, focus, pose, others);
     }
     const renderStart = performance.now();
-    v.render();
+    if (this.p2) v.renderSplit(this.cam2);
+    else v.render();
     const renderMs = performance.now() - renderStart;
     this.hud.setSpeed(focus.speed);
     const assists = settings().assists;
@@ -1914,6 +2110,7 @@ export class RaceScreen implements Screen {
     this.hud.setTyres(car.wear ? car.compound : null, car.tyreLeft, this.crew?.service ?? 0);
     this.updateHud(alpha);
     this.hud.tick(dt);
+    this.hud2.tick(dt);
 
     // Medal/qualifying laps used to add 1,500–4,500 extra physics ticks to
     // one frame. Keep both jobs inside one deadline, after the visible race.
@@ -1926,7 +2123,15 @@ export class RaceScreen implements Screen {
     // Automatic resolution: only while the race is really running (the game's own work, the
     // render call left out: a graphics card that can't keep up shows up as slow frames then).
     if (!this.paused && this.stage !== 'grid' && session.phase === 'racing') v.adaptResolution(dt, (performance.now() - frameStart - renderMs) / 1000);
-    if (this.finishedFor >= 0 && !this.paused) {
+    // Split screen: the results wait for player 2 to finish (or break down) too.
+    const p2Racing = !!this.p2 && this.stage === 'run' && this.p2.ai.session.phase === 'racing' && !this.p2.ai.session.retired && !this.gone[this.opponents.indexOf(this.p2) + 1];
+    if (this.finishedFor >= 0 && p2Racing) {
+      this.finishedFor = 0;
+      if (!this.p2Waiting) {
+        this.p2Waiting = true;
+        this.hud.flash(STR.race.p2Waiting, 'info', 3);
+      }
+    } else if (this.finishedFor >= 0 && !this.paused) {
       this.finishedFor += dt;
       if (this.finishedFor >= (session.retired ? DAMAGE.resultsDelay : RACE.resultsDelay)) {
         this.finishedFor = -1;

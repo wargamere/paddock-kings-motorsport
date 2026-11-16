@@ -739,6 +739,10 @@ export const ENGINEER = {
   coverLaps: 2.5,
   scStopBelow: 0.6,
   damageWarn: 0.75,
+  /** A rival this close (s) ahead or behind gets a word about their character, once. */
+  rivalGap: 1,
+  /** A rival's mistake this close (m along the track) is worth a word. */
+  mistakeNear: 250,
   /** Lap-to-lap change in a gap (s) worth mentioning. */
   trend: 0.15,
 } as const;
@@ -823,4 +827,50 @@ export const DAMAGE_LOOK = {
   debrisLife: 14,
   /** Sliding faster than this (m/s) sideways smokes the tyres. */
   tyreSmokeSlip: 3.5,
+} as const;
+
+/**
+ * AI personalities (race/personality.ts). Each AI driver has a style
+ * (−1 defensive … +1 aggressive), rain skill and tyre care (−1 … +1) and a
+ * consistency (0 erratic … 1 metronome), the same every race (from their
+ * name). From `traitFrom` either way a trait is named. In the rain a driver
+ * is up to `rainPace` quicker or slower (on a soaked road); tyres wear up to
+ * `tyreWear` slower or faster. Aggressive drivers push `pushPace` harder
+ * chasing a car within ERS.attack m, brake later fighting for a place and
+ * boost from further back; defensive ones go `defendPace` quicker with a car
+ * close behind and defend with the boost from further back.
+ *
+ * Mistakes: at the start of a braking zone (a lock-up: too little brake for
+ * `lockup.time` s, running deep), turning into a bend (running wide: less
+ * steering for `wide.time` s) or powering out of one (a spin: a kick of
+ * `spin.yaw` rad/s and the throttle cut for `spin.cut` s). Each chance is
+ * `base` × (1.5 − consistency), more under pressure (a car within
+ * `pressureRange` m behind), on worn tyres, in the wet, damaged and for
+ * aggressive drivers; a spin is `spinShare` as likely.
+ */
+export const PERSONALITY = {
+  traitFrom: 0.45,
+  rainPace: 0.015,
+  tyreWear: 0.15,
+  pushPace: 0.004,
+  defendPace: 0.003,
+  attackRange: 0.5,
+  defendRange: 0.6,
+  /** Aggressive drivers brake later with a car this close ahead (m). */
+  lateWithin: 20,
+  mistake: {
+    base: 0.005,
+    pressure: 1.8,
+    pressureRange: 15,
+    wornBelow: 0.3,
+    worn: 2,
+    wet: 1.3,
+    damage: 1,
+    aggressive: 0.6,
+    spinShare: 0.35,
+    startAfter: 300,
+  },
+  lockup: { time: 0.7, brake: 0 },
+  wide: { time: 1.3, steer: 0.35 },
+  spin: { yaw: 7, cut: 2.2 },
 } as const;

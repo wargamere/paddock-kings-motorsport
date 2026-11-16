@@ -200,3 +200,19 @@ test('the boost: how to use it, once, at the start of a race with other cars', (
   assert.equal(eng.update(view({ time: ENGINEER.boostAfter, lapsDone: 0, boostKey: 'Space' }))?.text, fmt(E.boostTip, { key: 'Space' }));
   assert.equal(new RaceEngineer().update(view({ time: 5, lapsDone: 0, cars: 1, ahead: null, behind: null, boostKey: 'Space' })), null, 'alone: no boost');
 });
+
+test('rivals: a word on the character of a car close ahead or behind, once each; rain traits only in the wet; and their mistakes', () => {
+  const eng = new RaceEngineer();
+  const behind = { id: 5, name: 'Esme', gap: 0.6, pitting: false, stops: 0, traits: ['aggressive' as const] };
+  assert.equal(eng.update(view({ time: 100, behind, tyres: null }))?.text, fmt(STR.traits.aggressive.behind, { name: 'Esme' }));
+  assert.equal(eng.update(view({ time: 120, behind, tyres: null })), null, 'once');
+  const e2 = new RaceEngineer();
+  const rainy = { id: 3, name: 'Cleo', gap: 0.8, pitting: false, stops: 0, traits: ['rainMaster' as const, 'defensive' as const] };
+  assert.equal(e2.update(view({ time: 100, ahead: rainy, tyres: null }))?.text, fmt(STR.traits.defensive.ahead, { name: 'Cleo' }), 'dry: not the rain trait');
+  const e3 = new RaceEngineer();
+  assert.equal(e3.update(view({ time: 100, ahead: rainy }, { wetness: 0.6, compound: 'wet', lapsLeft: 12 }))?.text, fmt(STR.traits.rainMaster.ahead, { name: 'Cleo' }));
+  assert.equal(new RaceEngineer().update(view({ time: 100, behind: { ...behind, gap: ENGINEER.rivalGap + 0.5 }, tyres: null })), null, 'too far back');
+  const e4 = new RaceEngineer();
+  e4.note('mistake:1', fmt(STR.mistakes.spin, { name: 'Ada' }), 100);
+  assert.equal(e4.update(view({ time: 100, tyres: null }))?.text, fmt(STR.mistakes.spin, { name: 'Ada' }));
+});
