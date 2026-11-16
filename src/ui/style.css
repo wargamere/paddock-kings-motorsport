@@ -2872,16 +2872,20 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   display: none;
 }
 
-/* DRS and the overtake boost's battery. */
+/* DRS and the overtake boost's battery (the panel is made wide enough for it, so the boost's key always shows). */
+.hud-speed:has(.hud-power:not([hidden])) {
+  min-width: 15rem;
+}
+
 .hud-power {
   flex-basis: 100%;
   contain: inline-size;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.3rem;
-  font-size: 0.62rem;
-  font-weight: 800;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 900;
   letter-spacing: 0.06em;
 }
 
@@ -2891,17 +2895,18 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
 
 .drs-chip {
   flex: none;
-  padding: 0.05em 0.45em;
-  border: 0.15em solid #6b7280;
+  padding: 0.1em 0.5em;
+  border: 0.16em solid #6b7280;
   border-radius: 0.35em;
   color: #9ca3af;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   font-weight: 900;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
 .drs-chip.armed {
   border-color: #f5b301;
+  background: rgba(245, 179, 1, 0.18);
   color: #ffd34d;
 }
 
@@ -2918,27 +2923,61 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
 
 .ers-bar {
   flex: 1;
-  height: 0.45rem;
-  min-width: 2.5rem;
-  border-radius: 0.3rem;
-  background: rgba(255, 255, 255, 0.18);
+  height: 0.7rem;
+  min-width: 2rem;
+  border: 1px solid rgba(255, 211, 77, 0.6);
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.12);
   overflow: hidden;
 }
 
 .ers-fill {
   height: 100%;
   width: 100%;
-  background: #ffd34d;
+  background: linear-gradient(90deg, #f5b301, #ffe066);
+}
+
+/* The key that works the boost. */
+.ers-key {
+  flex: none;
+  padding: 0 0.4em;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 0.3em;
+  color: #fff;
+  font-size: 0.66rem;
 }
 
 .hud-power.boosting .ers-fill {
   background: #fff3b0;
-  box-shadow: 0 0 0.5rem #ffd34d;
+  box-shadow: 0 0 0.6rem #ffd34d;
 }
 
 .hud-power.boosting .ers-label {
   color: #fff3b0;
   text-shadow: 0 0 0.4rem #ffd34d;
+}
+
+/* "DRS OPEN" across the screen while the flap is open. */
+.hud-drs-banner {
+  position: absolute;
+  left: 50%;
+  top: 6.4rem;
+  padding: 0.2em 0.9em;
+  border-radius: 0.5em;
+  background: #22c55e;
+  color: #06280f;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity 0.12s, transform 0.12s;
+  pointer-events: none;
+}
+
+.hud-drs-banner.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 /* A tyre's kind: its letter in a ring of its colour (soft red, medium yellow, hard white, wet blue). */

@@ -43,6 +43,8 @@ export interface EngineerView {
   rule?: { used: readonly Compound[] } | null;
   /** DRS is enabled (from the second lap, in the dry, with no safety car). */
   drs?: boolean;
+  /** The race has the overtake boost: the key (or button) that works it. */
+  boostKey?: string;
 }
 
 /** A radio message. `urgent`: a call to act on now (box, the safety car, the weather). */
@@ -151,6 +153,9 @@ export class RaceEngineer {
       if (v.lapsDone === 0 && now >= E.ruleAfter) this.want('rule', R.ruleReminder, false, now);
       if (!v.pitting && v.lapsLeft < CONDITIONS.pitMinLaps + 0.5) this.want('ruleMissed', R.ruleMissed, true, now);
     }
+
+    // The boost, at the start: how to use it.
+    if (v.boostKey && v.cars > 1 && now >= E.boostAfter) this.want('boost', fmt(R.boostTip, { key: v.boostKey }), false, now);
 
     // DRS enabled.
     if (v.drs && !p?.drs && v.cars > 1) this.want('drs', R.drsOn, false, now);

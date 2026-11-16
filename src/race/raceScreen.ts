@@ -1,9 +1,9 @@
-import { type Mesh, type PerspectiveCamera, Vector3 } from 'three';
+import { type Group, type Mesh, type PerspectiveCamera, Vector3 } from 'three';
 import { audio } from '../audio/audio.ts';
 import { CameraRig } from '../car/camera.ts';
 import { collideCars } from '../car/contact.ts';
 import { carriedTow, slipstream } from '../car/slipstream.ts';
-import { keyboardHint } from '../car/bindings.ts';
+import { keyboardHint, keysText } from '../car/bindings.ts';
 import { InputManager, type InputAction } from '../car/input.ts';
 import { CarModel } from '../car/model.ts';
 import { currentPaintHex, recordFinishedRun } from '../car/paint.ts';
@@ -37,6 +37,7 @@ import { GridOverlay, type GridEntry } from '../ui/gridOverlay.ts';
 import { knockoutGrid, knockoutOut, knockoutSession, trackEvolution } from './knockout.ts';
 import { DrsControl } from './drs.ts';
 import { RaceEffects } from '../render/effects.ts';
+import { buildDrsMarkings, disposeDrsMarkings } from '../render/drsMesh.ts';
 import { carEffects } from '../render/carEffects.ts';
 import { AiDriver, aiField, aiPace, gridOrder, gridPlace, qualifyingOrder, YOU } from './ai.ts';
 import { RacingDriver } from './driver.ts';
@@ -153,8 +154,10 @@ export class RaceScreen implements Screen {
   /** Smoke, sparks and bits of car (null without WebGL); each car's hardest hit since the last frame. */
   private readonly fx: RaceEffects | null;
   private readonly fxHits = new Float32Array(AI.maxField + 1);
-  /** DRS in a race with AI cars (and with it the overtake boost): who may open the flap where. */
+  /** DRS in a race with AI cars (and with it the overtake boost): who may open the flap where; its zones painted on the road. */
   private drs: DrsControl | null = null;
+  private drsMarks: Group | null = null;
+  private drsMarksTrack: Track | null = null;
   /** Your race engineer (in a race), and the radio you hear them on. */
   private engineer: RaceEngineer | null = null;
   private readonly radio = new Radio();
@@ -383,6 +386,7 @@ export class RaceScreen implements Screen {
 
   exit(): void {
     this.fx?.clear();
+    if (this.drsMarks) this.drsMarks.visible = false;
     this.input.detach();
     this.touch.release();
     this.abort?.abort();
@@ -513,6 +517,7 @@ export class RaceScreen implements Screen {
   /** What every new run (or qualifying session) resets. */
   private resetRun(): void {
     const def = this.game.track.def;
+    this.drs = null;
     this.fx?.clear();
     this.fxHits.fill(0);
     this.applyPaint();
@@ -605,6 +610,7 @@ export class RaceScreen implements Screen {
     car.ers = 1;
     car.drs = false;
     this.touch.setBoost(!!this.drs);
+    this.showDrsMarkings();
     this.hits = [];
     if (this.scModel) this.scModel.root.visible = false;
     this.hud.setFlag(null);
@@ -636,6 +642,10 @@ export class RaceScreen implements Screen {
     this.stage = 'qualifying';
     this.qPart = part;
     this.qNext = null;
+    // (No DRS markings or boost in qualifying.)
+    this.drs = null;
+    this.showDrsMarkings();
+    this.touch.setBoost(false);
     if (part === 1) {
       this.qSessions = [];
       this.qBase.clear();
@@ -1124,6 +1134,31 @@ export class RaceScreen implements Screen {
     let laps = s.laps.length;
     for (const o of this.opponents) laps = Math.max(laps, o.ai.session.laps.length);
     return laps >= DRS.fromLap - 1 && (!this.control || this.control.sc === 'none') && this.weather.lineWet < DRS.wetFrom;
+  }
+
+  /** The DRS zones painted on the road and drawn on the minimap (in a race with DRS), else hidden. */
+  private showDrsMarkings(): void {
+    const v = this.game.view3d;
+    const t = this.game.track;
+    this.hud.minimap.setZones(this.drs?.zones ?? []);
+    if (!v) return;
+    if (this.drsMarks && this.drsMarksTrack !== t) {
+      v.scene.remove(this.drsMarks);
+      disposeDrsMarkings(this.drsMarks);
+      this.drsMarks = null;
+    }
+    if (this.drs && !this.drsMarks) {
+      this.drsMarks = buildDrsMarkings(t, this.drs.zones);
+      this.drsMarksTrack = t;
+      v.scene.add(this.drsMarks);
+    }
+    if (this.drsMarks) this.drsMarks.visible = !!this.drs;
+  }
+
+  /** The key (or button) that works the boost, for the device you last used. */
+  private boostKey(): string {
+    const d = this.input.lastDevice;
+    return d === 'touch' ? STR.race.touchBoost : d === 'gamepad' ? 'B' : keysText(settings().keys, 'boost') || '—';
   }
 
   /** Car `idx` (0 = you) opens its DRS flap: cleared for the zone it's in, at full throttle, off the brakes, out of the pit lane. */
@@ -1664,6 +1699,7 @@ export class RaceScreen implements Screen {
       safetyCarCount: this.control?.scCount ?? 0,
       rule: this.twoCompounds ? { used: car.tyresUsed } : null,
       drs: !!this.drs?.enabled,
+      boostKey: this.drs ? this.boostKey() : undefined,
     };
   }
 
@@ -1884,7 +1920,7 @@ export class RaceScreen implements Screen {
     this.touch.setManualGears(assists.gears === 'manual');
     this.updateLine(this.watching ? 'off' : assists.line);
     this.hud.setSlipstream(car.draft, SLIPSTREAM.show);
-    this.hud.setPower(this.drs && !this.watching && this.stage === 'run' ? { drs: car.drs ? 'open' : this.drs.armed(0) ? 'armed' : 'off', battery: car.ers, boosting: car.boosting } : null);
+    this.hud.setPower(this.drs && !this.watching && this.stage === 'run' ? { drs: car.drs ? 'open' : this.drs.armed(0) ? 'armed' : 'off', battery: car.ers, boosting: car.boosting, key: this.boostKey() } : null);
     this.showWeather(v);
     this.towerIn -= dt;
     if (this.towerIn <= 0) {

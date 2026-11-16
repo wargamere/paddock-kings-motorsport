@@ -20,6 +20,8 @@ export class Minimap {
   private ox = 0;
   private oy = 0;
   private sizeDirty = true;
+  /** DRS zones, drawn green on the track (m along it). */
+  private zones: readonly { from: number; to: number }[] = [];
   private readonly observer: ResizeObserver | null;
 
   constructor() {
@@ -27,6 +29,16 @@ export class Minimap {
     this.ctx = this.root.getContext('2d');
     this.observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => { this.sizeDirty = true; });
     this.observer?.observe(this.root);
+  }
+
+  /** DRS zones to draw on the map (none: []). */
+  setZones(zones: readonly { from: number; to: number }[]): void {
+    const same = zones.length === this.zones.length && zones.every((z, i) => z.from === this.zones[i].from && z.to === this.zones[i].to);
+    if (same) return;
+    this.zones = zones;
+    // (Redrawn on the next frame.)
+    this.track = null;
+    this.sizeDirty = true;
   }
 
   /** Redraws the background when the track or the minimap's size changes. */
@@ -99,6 +111,13 @@ export class Minimap {
       g.lineWidth = road;
       run(o.from, o.count);
     }
+    // DRS zones: green.
+    g.lineCap = 'butt';
+    g.strokeStyle = '#22c55e';
+    g.lineWidth = road;
+    const L = track.center.length;
+    const sp = track.center.spacing;
+    for (const z of this.zones) run(Math.round(z.from / sp), Math.max(1, Math.round((((z.to - z.from) % L) + L) % L / sp)));
     // Start line.
     const s = pts[0];
     const t = track.center.tangents[0];

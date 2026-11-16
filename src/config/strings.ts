@@ -408,7 +408,8 @@ export const STR = {
     },
     ruleReminder: 'Remember: two dry compounds today. We have to stop at least once.',
     ruleMissed: 'We never ran a second compound. We’ll be disqualified.',
-    drsOn: 'DRS enabled.',
+    drsOn: 'DRS enabled. Within a second of the car ahead at the white line, and the flap opens in the green zone.',
+    boostTip: 'Boost is ready: hold {key} for extra power on the straights. Braking charges it.',
     boxAgain: 'Box this lap! Box, box. We’re ready with {tyres}.',
     plan: 'Plan is to box in about {n} laps for {tyres}.',
     manage: 'We’re staying out to the end. Look after the tyres.',
@@ -929,6 +930,8 @@ export const STR = {
     slipstream: 'SLIPSTREAM',
     /** DRS and the overtake boost. */
     drs: 'DRS',
+    drsReady: 'DRS READY',
+    drsOpen: 'DRS OPEN',
     drsTitle: 'DRS: grey off, amber cleared for the next zone (within 1 s at the detection point), green open',
     boost: 'BOOST',
     boostTitle: 'Overtake boost: hold Space (B on a gamepad). Braking charges it.',

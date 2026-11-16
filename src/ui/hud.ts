@@ -39,6 +39,9 @@ export class Hud {
   /** DRS and the overtake boost's battery (a race with them). */
   private readonly power: HTMLElement;
   private readonly drsChip: HTMLElement;
+  /** "DRS" across the screen while the flap is open. */
+  private readonly drsBanner: HTMLElement;
+  private readonly ersKey: HTMLElement;
   private readonly ersFill: HTMLElement;
   private drsState = '';
   private ersPct = '';
@@ -122,7 +125,9 @@ export class Hud {
     this.damage.hidden = true;
     this.drsChip = h('span', { class: 'drs-chip', text: STR.race.drs, title: STR.race.drsTitle });
     this.ersFill = h('div', { class: 'ers-fill' });
-    this.power = h('div', { class: 'hud-power' }, this.drsChip, h('span', { class: 'ers-label', text: STR.race.boost, title: STR.race.boostTitle }), h('div', { class: 'ers-bar' }, this.ersFill));
+    this.ersKey = h('span', { class: 'ers-key' });
+    this.power = h('div', { class: 'hud-power' }, this.drsChip, h('span', { class: 'ers-label', text: STR.race.boost, title: STR.race.boostTitle }), h('div', { class: 'ers-bar' }, this.ersFill), this.ersKey);
+    this.drsBanner = h('div', { class: 'hud-drs-banner', text: STR.race.drsOpen });
     this.power.hidden = true;
     const speed = h(
       'div',
@@ -137,7 +142,7 @@ export class Hud {
     this.draft = h('div', { class: 'hud-draft', text: STR.race.slipstream });
     this.hint = h('div', { class: 'hud-hint' });
     this.debug = h('div', { class: 'hud-debug' });
-    this.root = h('div', { class: 'screen hud' }, top, timer, this.minimap.root, this.center, speed, this.draft, this.weather, this.flag, this.picker, this.hint, this.debug);
+    this.root = h('div', { class: 'screen hud' }, top, timer, this.minimap.root, this.center, speed, this.draft, this.drsBanner, this.weather, this.flag, this.picker, this.hint, this.debug);
   }
 
   /** Medal targets under the timer; the ones your best lap has won are lit. */
@@ -322,12 +327,19 @@ export class Hud {
    * DRS and the boost (null: not in this race): DRS off (grey), cleared for
    * the zone ahead (amber) or open (green); the battery, and boosting.
    */
-  setPower(p: { drs: 'off' | 'armed' | 'open'; battery: number; boosting: boolean } | null): void {
+  setPower(p: { drs: 'off' | 'armed' | 'open'; battery: number; boosting: boolean; key: string } | null): void {
     this.power.hidden = !p;
-    if (!p) return;
+    if (!p) {
+      if (this.drsState) this.drsBanner.classList.remove('on');
+      this.drsState = '';
+      return;
+    }
+    if (this.ersKey.textContent !== p.key) this.ersKey.textContent = p.key;
     if (p.drs !== this.drsState) {
       this.drsState = p.drs;
       this.drsChip.className = `drs-chip ${p.drs}`;
+      this.drsChip.textContent = p.drs === 'armed' ? STR.race.drsReady : STR.race.drs;
+      this.drsBanner.classList.toggle('on', p.drs === 'open');
     }
     const pct = `${Math.round(p.battery * 50) * 2}%`;
     if (pct !== this.ersPct) {
