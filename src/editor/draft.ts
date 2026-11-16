@@ -8,7 +8,7 @@ export interface EditorDraft {
   closed: boolean;
   name: string;
   options: TrackOptions;
-  /** Placed scenery, bump kerbs and painted run-off. */
+  /** Placed scenery, bump kerbs, painted run-off and drawn DRS zones. */
   extras?: TrackExtras;
   savedAt: number;
 }
@@ -26,7 +26,14 @@ function safeExtras(raw: unknown): TrackExtras | undefined {
     if (placed.length) out.placed = placed;
   }
   if (Array.isArray(r.paint) && r.paint.length <= 100000 && r.paint.every((v) => Number.isInteger(v) && v >= 0)) out.paint = [...r.paint];
-  return out.placed || out.paint ? out : undefined;
+  if (Array.isArray(r.drs)) {
+    const drs = r.drs
+      .filter((m) => m && [m.x, m.y, m.x2, m.y2].every((v) => Number.isFinite(v) && Math.abs(v) <= Math.max(WORLD.width, WORLD.height)))
+      .slice(0, 16)
+      .map((m) => ({ x: m.x, y: m.y, x2: m.x2, y2: m.y2 }));
+    if (drs.length) out.drs = drs;
+  }
+  return out.placed || out.paint || out.drs ? out : undefined;
 }
 const KEY = 'editor.draft.v1';
 

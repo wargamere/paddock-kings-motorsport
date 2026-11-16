@@ -59,6 +59,7 @@ test('placed scenery, bump kerbs and painted run-off survive a track code, the l
       { kind: 'brakeboards', x: 120, y: -131.5, rot: Math.PI / 32 },
     ],
     paint: paintCode(g),
+    drs: [{ x: -100, y: -120.5, x2: 60, y2: -119 }],
   };
   const code = encodeTrack('Extras', t.def.control, t.def.options, extras);
   const d = decodeTrack(code);
@@ -66,6 +67,8 @@ test('placed scenery, bump kerbs and painted run-off survive a track code, the l
   if (!d.ok) return;
   assert.deepEqual(d.extras?.placed, extras.placed);
   assert.deepEqual(d.extras?.paint, extras.paint);
+  assert.deepEqual(d.extras?.drs, extras.drs, 'drawn DRS zones too');
+  assert.notEqual(contentId(t.def.control, t.def.options, { drs: extras.drs }), contentId(t.def.control, t.def.options), 'and DRS zones');
   assert.notEqual(contentId(t.def.control, t.def.options, extras), contentId(t.def.control, t.def.options), 'scenery and run-off are part of the track');
   // Without extras the code is as before (no extra blocks).
   assert.equal(decodeTrack(encodeTrack('E', t.def.control, t.def.options)).ok, true);

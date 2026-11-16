@@ -2,25 +2,49 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { damageLook } from '../src/car/model.ts';
 import { CarPhysics, type DriveInput } from '../src/car/physics.ts';
-import { DAMAGE_LOOK, DRS, ERS } from '../src/config/race.ts';
+import { DAMAGE_LOOK, DRS, DRS_REAL, ERS } from '../src/config/race.ts';
 import { builtInTracks, getSampleTrack } from '../src/editor/pipeline.ts';
 import { DrsControl, drsZones, inZone } from '../src/race/drs.ts';
+import { buildTrack } from '../src/track/track.ts';
 
-test('DRS zones: every real circuit has one or two, on its straights, each a decent length, detected before it', () => {
+test('DRS zones: every real circuit has its real ones (where there is a straight for them), each a decent length, detected before it', () => {
   for (const b of builtInTracks()) {
     if (!b.def.id.startsWith('world-')) continue;
     const t = b.track();
     const L = t.center.length;
     const zones = drsZones(t);
-    assert.ok(zones.length >= 1 && zones.length <= DRS.maxZones, `${b.def.name}: ${zones.length} zones`);
+    const real = DRS_REAL.zones[b.def.id];
+    assert.ok(real, `${b.def.name} is listed`);
+    assert.ok(zones.length >= 1 && zones.length <= real.length, `${b.def.name}: ${zones.length} zones`);
     for (const z of zones) {
       const length = (((z.to - z.from) % L) + L) % L;
-      assert.ok(length >= DRS.shortest, `${b.def.name}: a ${length.toFixed(0)} m zone`);
+      assert.ok(length >= DRS_REAL.shortest, `${b.def.name}: a ${length.toFixed(0)} m zone`);
       assert.ok(Math.abs((((z.from - z.detect) % L) + L) % L - DRS.detect) < 1e-6, 'detection before the zone');
       assert.ok(inZone(z, (z.from + 1) % L, L) && !inZone(z, z.detect, L));
     }
   }
+  const count = (name: string) => drsZones(builtInTracks().find((b) => b.def.name === name)!.track()).length;
+  assert.equal(count('Sakhir'), 3);
+  assert.equal(count('Melbourne'), 4);
+  assert.equal(count('Monza'), 2);
+  assert.equal(count('Monaco'), 1);
+  assert.equal(count('Suzuka'), 1);
   assert.equal(drsZones(getSampleTrack(0)), drsZones(getSampleTrack(0)), 'worked out once per track');
+});
+
+test('DRS zones drawn in the editor replace the track\'s own; ones too short are left out', () => {
+  const base = getSampleTrack(0);
+  const c = base.center;
+  const p = (s: number) => c.points[Math.round(s / c.spacing) % c.points.length];
+  const mark = (a: number, b: number) => ({ x: p(a).x + 2, y: p(a).y, x2: p(b).x, y2: p(b).y - 2 });
+  const t = buildTrack({ ...base.def, extras: { drs: [mark(100, 300), mark(600, 620)] } });
+  const zones = drsZones(t);
+  assert.equal(zones.length, 1, 'the 20 m one is too short');
+  assert.ok(Math.abs(zones[0].from - 100) <= c.spacing * 2 && Math.abs(zones[0].to - 300) <= c.spacing * 2, `${zones[0].from}..${zones[0].to}`);
+  // Over the line: from near the end of the lap to just past the start.
+  const L = c.length;
+  const over = drsZones(buildTrack({ ...base.def, extras: { drs: [mark(L - 100, 80)] } }));
+  assert.ok(Math.abs((((over[0].to - over[0].from) % L) + L) % L - 180) <= c.spacing * 3);
 });
 
 test('DRS control: within a second of the car before at the detection point, cleared for that zone only while in it; never while disabled', () => {
