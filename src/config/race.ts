@@ -170,15 +170,28 @@ export const WEATHER = {
   stopTo: 0.8,
   practiceMin: 150,
   practiceMax: 300,
+  /**
+   * How hard it rains when it does (0..1: a drizzle leaves the road damp,
+   * for intermediates; heavy rain soaks it, for wets): between rainMin and 1.
+   * With shiftChance it then gets heavier or eases (to between rainMin and
+   * 1 again, at least shiftBy away) part-way through the shower.
+   */
+  rainMin: 0.35,
+  shiftChance: 0.55,
+  shiftBy: 0.3,
   /** The HUD forecasts a change this long (s) before it comes. */
   forecast: 90,
   /**
-   * AI cars change to wets once the road on the line is this wet, and back
-   * to slicks once it's dried to this, by grid slot (some gamble early, some
-   * late; the gap stops them flip-flopping).
+   * The tyres for the road (race/strategy.ts tyreBand): intermediates from
+   * `interFrom` wet, wets from `wetFrom`, about where their grip crosses
+   * over (TYRES.compounds). A change needs the road `hysteresis` past the
+   * crossover, so nobody flip-flops. Each AI car gambles by `aiBias` (by
+   * grid slot): + goes to wetter tyres sooner and back to drier ones later.
    */
-  aiToWets: [0.28, 0.34, 0.42],
-  aiToSlicks: [0.3, 0.24, 0.18],
+  interFrom: 0.25,
+  wetFrom: 0.56,
+  hysteresis: 0.05,
+  aiBias: [0.07, 0, -0.07, 0.03, -0.03],
 } as const;
 
 /** The car's setup (see SETUP). */
@@ -233,7 +246,7 @@ export const SETUP = {
 } as const;
 
 /** A kind of tyre (see TYRES.compounds). */
-export type Compound = 'soft' | 'medium' | 'hard' | 'wet';
+export type Compound = 'soft' | 'medium' | 'hard' | 'inter' | 'wet';
 
 /**
  * Tyres, with tyre wear on (`car/tyres.ts`). Wear is counted in laps driven
@@ -265,16 +278,20 @@ export const TYRES = {
    * their grip on a soaked road. Wets are the tyres for the rain, slow in the
    * dry and wearing out fast there: they're quicker once the road is about a
    * third wet. On Sunday Loop at 90 % wet, fresh wets beat worn softs by about
-   * 5 s a lap (tests/conditions.test.ts).
+   * 5 s a lap (tests/conditions.test.ts). Intermediates are for a damp
+   * road: their grip peaks at `damp` half-wet (between the two, by how wet
+   * it is, either side), so they beat slicks from about a quarter wet and wets
+   * until a little over half; in the dry they overheat and wear fast.
    */
   compounds: {
     soft: { grip: 1.05, rainGrip: 0.63, rainBrake: 0.65, life: 0.65, rainLife: 0.65 },
     medium: { grip: 1, rainGrip: 0.6, rainBrake: 0.65, life: 1, rainLife: 1 },
     hard: { grip: 0.95, rainGrip: 0.57, rainBrake: 0.65, life: 1.6, rainLife: 1.6 },
+    inter: { grip: 0.9, damp: 0.93, rainGrip: 0.78, rainBrake: 0.8, life: 0.45, rainLife: 1.1 },
     wet: { grip: 0.86, rainGrip: 0.95, rainBrake: 0.9, life: 0.4, rainLife: 1.3 },
-  },
+  } as Record<Compound, { grip: number; damp?: number; rainGrip: number; rainBrake: number; life: number; rainLife: number }>,
   /** Quickest first (in the dry). */
-  order: ['soft', 'medium', 'hard', 'wet'],
+  order: ['soft', 'medium', 'hard', 'inter', 'wet'] as readonly Compound[],
 } as const;
 
 /** AI opponents (race mode only). */

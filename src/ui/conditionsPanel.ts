@@ -22,11 +22,11 @@ export function conditionsSummary(c: Conditions, trackTime: TimeOfDay): string {
   return [weather, C.summaryTimes[timeFor(c, trackTime)], wear, ...extra].join(' · ');
 }
 
-/** Changing the weather puts on the tyres for it: wets in the rain, mediums (from wets) in the dry. */
+/** Changing the weather puts on the tyres for it: wets in the rain, mediums (from wets or inters) in the dry. */
 export function withWeather(c: Conditions, weather: Conditions['weather']): Partial<Conditions> {
   if (weather === 'rain' && c.tyres !== 'wet') return { weather, tyres: 'wet' };
   // (Changing weather starts dry.)
-  if (weather !== 'rain' && c.tyres === 'wet') return { weather, tyres: 'medium' };
+  if (weather !== 'rain' && (c.tyres === 'wet' || c.tyres === 'inter')) return { weather, tyres: 'medium' };
   return { weather };
 }
 

@@ -328,7 +328,7 @@ test('the conditions panel: each choice changes the setup and shows on its butto
   btn('Damage', 'Off').click();
   assert.equal(draft.damage, false);
   assert.equal(startField().hidden, false);
-  assert.match(startField().textContent ?? '', /\(rain\): Soft ≈ 3\.3 · Medium ≈ 5\.0 · Hard ≈ 8\.0 · Wet ≈ 6\.5/);
+  assert.match(startField().textContent ?? '', /\(rain\): Soft ≈ 3\.3 · Medium ≈ 5\.0 · Hard ≈ 8\.0 · Inter ≈ 5\.5 · Wet ≈ 6\.5/);
   btn('Starting tyres', 'Hard').click();
   assert.equal(draft.tyres, 'hard');
   assert.equal(btn('Starting tyres', 'Hard').getAttribute('aria-pressed'), 'true');

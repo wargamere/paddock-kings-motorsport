@@ -1,6 +1,7 @@
 import { CONDITIONS, DAMAGE, ENGINEER, type Compound } from '../config/race.ts';
 import { STR, fmt } from '../config/strings.ts';
-import { compoundsMet, pickCompound, ruleCompound, ruleStopDue, WET_FROM } from './strategy.ts';
+import { compoundGrip } from '../car/tyres.ts';
+import { bandOf, compoundsMet, INTER_FROM, pickCompound, ruleCompound, ruleStopDue, tyreBand, wetterBand } from './strategy.ts';
 import type { Trait } from './personality.ts';
 
 /** A car next to you in the race, as your engineer sees it. */
@@ -34,11 +35,11 @@ export interface EngineerView {
   pitting: boolean;
   stops: number;
   /** Tyres (null without tyre wear): the kind, share of their life left, laps they've left at this rate, a medium's life here, the road's wetness. */
-  tyres: { compound: Compound; left: number; lapsLeft: number; mediumLife: number; wetness: number } | null;
+  tyres: { compound: Compound; left: number; lapsLeft: number; mediumLife: number; wetness: number; lapTime?: number } | null;
   /** Damage 0..1 (null: no damage in this race). */
   damage: number | null;
-  /** The weather to come: rain or dry in `in` s. */
-  forecast: { to: 'rain' | 'dry'; in: number } | null;
+  /** The weather to come: rain, dry, heavier or lighter rain in `in` s. */
+  forecast: { to: 'rain' | 'dry' | 'heavier' | 'lighter'; in: number } | null;
   /** The safety car, and how many times it has been out. */
   safetyCar: 'none' | 'out' | 'in';
   safetyCarCount: number;
@@ -60,6 +61,8 @@ export interface RadioCall {
 export interface StopCall {
   reason: 'tyres' | 'rain' | 'dry' | 'damage' | 'rule';
   tyres: Compound | null;
+  /** The weather: about how much quicker a lap the new tyres are on this road (s). */
+  gain?: number;
 }
 
 interface Pending {
@@ -111,15 +114,24 @@ export class RaceEngineer {
     if (v.lapsLeft < C.pitMinLaps || v.pitting) return null;
     const tyresFor = (wetness: number) => RaceEngineer.tyresFor(v, v.lapsLeft, wetness);
     if (t) {
-      const wet = t.wetness >= WET_FROM;
-      if (wet && t.compound !== 'wet') return { reason: 'rain', tyres: 'wet' };
-      // (Slicks once the line is well dry: a little drier than wets need.)
-      if (!wet && t.compound === 'wet' && t.wetness < WET_FROM * 0.6) return { reason: 'dry', tyres: tyresFor(0) };
+      // The weather: intermediates, wets or slicks, once the road is a little past where they cross over.
+      const band = bandOf(t.compound), want = tyreBand(band, t.wetness);
+      if (want !== band) {
+        const fit = want === 'slick' ? tyresFor(0) : want;
+        const call: StopCall = { reason: wetterBand(want, band) ? 'rain' : 'dry', tyres: fit };
+        if (fit && t.lapTime) call.gain = RaceEngineer.gain(t.compound, fit, t.wetness, t.lapTime);
+        return call;
+      }
     }
     if (v.damage !== null && v.damage >= DAMAGE.aiPitAt) return { reason: 'damage', tyres: t ? tyresFor(t.wetness) : null };
     if (t && t.lapsLeft < 1 + ENGINEER.boxEarly && v.lapsLeft > t.lapsLeft + C.pitEndSlack) return { reason: 'tyres', tyres: tyresFor(t.wetness) };
     if (t && RaceEngineer.owed(v) && ruleStopDue(v.lapsLeft, v.lapsToRun)) return { reason: 'rule', tyres: tyresFor(t.wetness) };
     return null;
+  }
+
+  /** About how much quicker a lap (s) new tyres of kind `to` are than `from` on a road `wetness` wet, on a `lapTime` s lap (speed goes as the square root of grip). */
+  static gain(from: Compound, to: Compound, wetness: number, lapTime: number): number {
+    return Math.max(0, lapTime * (1 - Math.sqrt(compoundGrip(from, wetness) / compoundGrip(to, wetness))));
   }
 
   /** Laps until the next stop (Infinity: the tyres last the race and none is owed, or there's no wear). */
@@ -166,7 +178,8 @@ export class RaceEngineer {
     // The weather to come.
     if (v.forecast && v.lapsLeft > 0.5) {
       const s = Math.max(5, Math.round(v.forecast.in / 5) * 5);
-      this.want(`forecast:${v.forecast.to}:${Math.round((now + v.forecast.in) / 30)}`, fmt(v.forecast.to === 'rain' ? R.rainComing : R.dryComing, { s }), false, now);
+      const say = { rain: R.rainComing, dry: R.dryComing, heavier: R.heavierComing, lighter: R.lighterComing }[v.forecast.to];
+      this.want(`forecast:${v.forecast.to}:${Math.round((now + v.forecast.in) / 30)}`, fmt(say, { s }), false, now);
     }
 
     // The safety car: out (a cheap stop, if one is due soon), and in.
@@ -185,7 +198,9 @@ export class RaceEngineer {
       if (call.tyres) this.plan = call.tyres;
       const first = `box:${stint}:${call.reason}`;
       if (!this.said.has(first)) {
-        this.want(first, fmt(R.box[call.reason], { tyres: tyres(call.tyres) }), true, now);
+        const why = call.reason === 'rain' && call.tyres === 'inter' ? R.boxInters : call.reason === 'dry' && call.tyres === 'inter' ? R.boxIntersDrying : R.box[call.reason];
+        const gain = call.gain && call.gain >= 0.3 ? ` ${fmt(R.boxGain, { s: call.gain.toFixed(1), tyres: tyres(call.tyres) })}` : '';
+        this.want(first, fmt(why, { tyres: tyres(call.tyres) }) + gain, true, now);
         this.boxLap = v.lapsDone;
       } else if (v.lapsDone > this.boxLap) this.want(`${first}:${v.lapsDone}`, fmt(R.boxAgain, { tyres: tyres(call.tyres) }), true, now);
     } else if (t && !v.pitting) {
@@ -205,7 +220,7 @@ export class RaceEngineer {
 
     // A rival close ahead or behind for the first time: what to expect of them (their best-known trait).
     for (const [side, c] of [['ahead', v.ahead], ['behind', v.behind]] as const) {
-      const trait = c?.traits?.find((t) => t !== 'rainMaster' && t !== 'poorInRain' ? true : (v.tyres?.wetness ?? 0) >= WET_FROM);
+      const trait = c?.traits?.find((t) => t !== 'rainMaster' && t !== 'poorInRain' ? true : (v.tyres?.wetness ?? 0) >= INTER_FROM);
       if (!c || !trait || c.gap === null || c.gap > E.rivalGap || v.lapsDone < 1) continue;
       this.want(`rival:${c.id}`, fmt(STR.traits[trait][side], { name: c.name }), false, now);
     }
