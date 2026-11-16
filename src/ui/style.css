@@ -4315,15 +4315,3 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   contain: none;
 }
 
-/* An AI driver's best-known trait, on the grid after qualifying. */
-.standing-trait {
-  flex: none;
-  margin-left: 0.3rem;
-  padding: 0 0.4em;
-  border-radius: 0.3rem;
-  background: rgba(27, 58, 138, 0.1);
-  color: #4a5270;
-  font-size: 0.66rem;
-  font-weight: 800;
-  white-space: nowrap;
-}

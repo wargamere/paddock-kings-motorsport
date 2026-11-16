@@ -90,32 +90,43 @@ export function actionMap(b: KeyBindings): Map<string, DriveAction> {
   return m;
 }
 
-/** Driving keys split between two players on one keyboard: player 1 has the first key of each, player 2 the second. */
+/** Driving keys split between two players on one keyboard. */
 const SPLIT_ACTIONS = ['throttle', 'brake', 'left', 'right'] as const;
 
-/** Player 2's keys that aren't bindings: the boost and putting the car back on the road. */
-export const P2_KEYS = { boost: 'ShiftRight', reset: 'Slash' } as const;
+/**
+ * Player 2's keys in split screen, whatever the bindings: the arrows (and the
+ * number pad's arrows, with Num Lock off or on), Right Shift for the boost
+ * and / to reset.
+ */
+export const P2_KEYS: Readonly<Record<string, DriveAction>> = {
+  ArrowUp: 'throttle',
+  ArrowDown: 'brake',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  Numpad8: 'throttle',
+  Numpad2: 'brake',
+  Numpad4: 'left',
+  Numpad6: 'right',
+  ShiftRight: 'boost',
+  Slash: 'reset',
+};
 
-/** The arrow keys: player 2's driving keys when they aren't bound to anything. */
-const P2_DEFAULT: Record<(typeof SPLIT_ACTIONS)[number], string> = { throttle: 'ArrowUp', brake: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+/** Player 1's driving keys in split screen when the bindings leave them none (they were all on the arrows). */
+const P1_DEFAULT: Record<(typeof SPLIT_ACTIONS)[number], string> = { throttle: 'KeyW', brake: 'KeyS', left: 'KeyA', right: 'KeyD' };
 
 /**
- * Split screen on one keyboard: player 1's keys (every binding but the second
- * key of drive, brake and steer) and player 2's (those second keys, else the
- * arrows; Right Shift for the boost, / to reset).
+ * Split screen on one keyboard: player 2 always has the arrows (see P2_KEYS);
+ * player 1 every other key bound, and W A S D for any of drive, brake and
+ * steer the bindings only had on the arrows.
  */
 export function splitMaps(b: KeyBindings): { p1: Map<string, DriveAction>; p2: Map<string, DriveAction> } {
   const p1 = actionMap(b);
-  const p2 = new Map<string, DriveAction>();
+  const p2 = new Map<string, DriveAction>(Object.entries(P2_KEYS));
+  for (const k of p2.keys()) p1.delete(k);
   for (const a of SPLIT_ACTIONS) {
-    const k = b[a][1] ?? (p1.has(P2_DEFAULT[a]) && !b[a].includes(P2_DEFAULT[a]) ? undefined : P2_DEFAULT[a]);
-    if (!k) continue;
-    p2.set(k, a);
-    p1.delete(k);
+    const has = [...p1.values()].includes(a);
+    if (!has && !p1.has(P1_DEFAULT[a])) p1.set(P1_DEFAULT[a], a);
   }
-  p2.set(P2_KEYS.boost, 'boost');
-  p2.set(P2_KEYS.reset, 'reset');
-  for (const k of [P2_KEYS.boost, P2_KEYS.reset]) if (!b.boost.includes(k) && !b.reset.includes(k)) p1.delete(k);
   return { p1, p2 };
 }
 
