@@ -573,7 +573,7 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
 In a race with AI cars (`race/drs.ts`, `config/race.ts` `DRS` and `ERS`):
 
 - **DRS zones** are the track's longest straights, where nothing holds the quickest car below 90 % of its top speed for at least 200 m (at most two; every real circuit has at least one). A zone starts 15 m after the bend before it and ends 15 m before the braking for the next.
-- **You can see them** (`render/drsMesh.ts`): each detection point is a dashed white line across the road, each zone starts with a green band with *DRS* painted on it and ends with a thin green line, and the zones are green on the minimap.
+- **On the minimap** the zones are green.
 - **Detection:** cross a zone's detection point (80 m before it) within 1 s of the car ahead and you're cleared for that zone: the DRS light on the HUD turns amber (*DRS READY*). In the zone the flap opens by itself at full throttle (the light goes green and *DRS OPEN* shows across the top of the screen) and shuts the moment you brake: 30 % less drag and up to 5 % more top speed. DRS is enabled from the second lap, in the dry, and never behind the safety car; your race engineer tells you when it's on.
 - **The overtake boost** (hold Space, B on a gamepad, BOOST on a touch screen): 2.4 m/s² more push and up to 4 % more top speed while the battery lasts (about 8 s from full). Braking charges it. Everyone starts with a full battery; the HUD shows yours under the tyres, with the key that works it, and your race engineer explains it at the start.
 - **The AI uses both:** DRS where it's cleared, and the boost on a straight at full throttle to pass a car within 30 m or keep one within 14 m behind, keeping 30 % back until the last lap.

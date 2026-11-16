@@ -34,7 +34,7 @@ function pitTexture(): CanvasTexture {
 }
 
 /** Road height at track position `s` (m), `lat` metres left of the centre line, between samples. */
-export function roadY(track: Track, s: number, lat: number): number {
+function roadY(track: Track, s: number, lat: number): number {
   const c = track.center;
   const n = c.points.length;
   const f = wrap(s, c.length) / c.spacing;

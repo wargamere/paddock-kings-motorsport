@@ -408,7 +408,7 @@ export const STR = {
     },
     ruleReminder: 'Remember: two dry compounds today. We have to stop at least once.',
     ruleMissed: 'We never ran a second compound. We’ll be disqualified.',
-    drsOn: 'DRS enabled. Within a second of the car ahead at the white line, and the flap opens in the green zone.',
+    drsOn: 'DRS enabled. Be within a second of the car ahead coming up to a DRS zone (green on the map) and the flap opens in it.',
     boostTip: 'Boost is ready: hold {key} for extra power on the straights. Braking charges it.',
     boxAgain: 'Box this lap! Box, box. We’re ready with {tyres}.',
     plan: 'Plan is to box in about {n} laps for {tyres}.',
