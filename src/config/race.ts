@@ -741,7 +741,8 @@ export const ENGINEER = {
   damageWarn: 0.75,
   /** A rival this close (s) ahead or behind gets a word about their character, once. */
   rivalGap: 1,
-  /** A rival's mistake this close (m along the track) is worth a word. */
+  /** A rival's mistake is worth a word only from a car within this many places of you, this close (m of race distance: the same lap). */
+  mistakePlaces: 2,
   mistakeNear: 250,
   /** Lap-to-lap change in a gap (s) worth mentioning. */
   trend: 0.15,

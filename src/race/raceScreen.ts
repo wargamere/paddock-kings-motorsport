@@ -994,9 +994,13 @@ export class RaceScreen implements Screen {
     const o = this.opponents[idx - 1];
     const s = this.session;
     if (!o || !s || !this.engineer || this.watching || this.stage !== 'run' || this.gone[0]) return;
-    const L = this.game.track.center.length;
-    const ds = Math.abs(((o.ai.car.state.s - this.car!.state.s + L * 1.5) % L) - L / 2);
-    if (ds > ENGINEER.mistakeNear) return;
+    // Only a car you're racing: within ENGINEER.mistakePlaces places of you, and close by
+    // on the same lap (a backmarker you're lapping is no news).
+    const order = this.standings();
+    const mine = order.findIndex((e) => e.you);
+    const theirs = order.findIndex((e) => e.idx === idx);
+    if (mine < 0 || theirs < 0 || Math.abs(mine - theirs) > ENGINEER.mistakePlaces) return;
+    if (Math.abs(order[mine].dist - order[theirs].dist) > ENGINEER.mistakeNear) return;
     this.engineer.note(`mistake:${idx}:${o.ai.session.laps.length}:${kind}`, fmt(STR.mistakes[kind], { name: o.ai.name }), s.time() - s.goTime);
   }
 
