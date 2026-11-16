@@ -5,6 +5,7 @@ import type { CareerSave, RoundResult } from './career.ts';
 import { driverDef, teamsFor } from './roster.ts';
 import { carDevelopment } from './engineering.ts';
 import { developRivals, type CarArea } from './carAreas.ts';
+import { roundPoints } from './points.ts';
 
 export type StaffRole = 'technical' | 'coach' | 'engineer';
 export type Department = 'laboratory' | 'simulator' | 'commercial';
@@ -223,7 +224,7 @@ export function resolveDecision(save: CareerSave, key: string, choice: number): 
   w.decisions.unshift({ key, template: decision.id, choice, season: save.season, round: save.done.length }); w.decisions = w.decisions.slice(0, 80);
   news(save, decision.title, `${option.label}. ${option.detail}`); return true;
 }
-function points(result: RoundResult, ids: readonly string[]): number { return ids.reduce((n, id) => n + (result.dnf.includes(id) ? 0 : CAREER.points[result.order.indexOf(id)] ?? 0), 0); }
+function points(result: RoundResult, ids: readonly string[]): number { return ids.reduce((n, id) => n + roundPoints(result, id), 0); }
 function unlock(save: CareerSave, id: string): void {
   const w = dynasty(save), spec = ACHIEVEMENTS.find((a) => a[0] === id);
   if (!spec || w.achievements.includes(id)) return;

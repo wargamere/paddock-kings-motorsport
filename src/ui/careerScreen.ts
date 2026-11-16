@@ -16,6 +16,10 @@ import {
   pointsFor,
   raceLaps,
   recordRound,
+  recordSprint,
+  sprintLaps,
+  sprintPointsFor,
+  sprintRound,
   roundFailures,
   roundWeather,
   setGrid,
@@ -38,6 +42,7 @@ import { settings } from '../core/settings.ts';
 import { builtInTrack } from '../editor/pipeline.ts';
 import { formatTime } from '../race/session.ts';
 import { trackLapTime, trackTyreLife } from '../race/strategy.ts';
+import { knockoutOut } from '../race/knockout.ts';
 import { TrackOrbit } from '../render/orbit.ts';
 import { Garage } from '../render/garage.ts';
 import type { Track } from '../track/track.ts';
@@ -74,6 +79,8 @@ function dot(t: TeamDef): HTMLElement {
 interface Shown {
   round: number;
   track: string;
+  /** A sprint's result (then `result` holds the sprint's classification), or the Grand Prix's. */
+  sprint?: boolean;
   result: RoundResult;
   /** By driver id: race time (null: didn't finish, or stopped early) and laps done. */
   times: Map<string, { time: number | null; laps: number }>;
@@ -501,10 +508,18 @@ export class CareerScreen implements Screen {
         )
       : null;
     const go = (session: RaceEventSpec['session']) => () => this.drive(session);
-    this.primary = go(grid ? 'race' : 'qualifying');
-    this.sessions = grid
-      ? [button(C.requalify, go('qualifying'), { icon: '⏱' }), button(C.practice, go('practice'), { icon: '⟳' }), button(C.race, go('race'), { icon: '🏁', class: 'primary', key: 'Enter' })]
-      : [button(C.practice, go('practice'), { icon: '⟳' }), button(C.qualifying, go('qualifying'), { icon: '⏱', class: 'primary', key: 'Enter' })];
+    // A sprint weekend: qualifying, the sprint (from its grid), then the Grand Prix (from the sprint's result).
+    const sprintWeekend = sprintRound(save, round);
+    const next: RaceEventSpec['session'] = !grid ? 'qualifying' : sprintWeekend && !save.sprint ? 'sprint' : 'race';
+    this.primary = go(next);
+    this.sessions =
+      next === 'qualifying'
+        ? [button(C.practice, go('practice'), { icon: '⟳' }), button(C.qualifying, go('qualifying'), { icon: '⏱', class: 'primary', key: 'Enter' })]
+        : next === 'sprint'
+          ? [button(C.requalify, go('qualifying'), { icon: '⏱' }), button(C.practice, go('practice'), { icon: '⟳' }), button(C.sprint, go('sprint'), { icon: '🏁', class: 'primary', key: 'Enter' })]
+          : sprintWeekend
+            ? [button(C.practice, go('practice'), { icon: '⟳' }), button(C.grandPrix, go('race'), { icon: '🏁', class: 'primary', key: 'Enter' })]
+            : [button(C.requalify, go('qualifying'), { icon: '⏱' }), button(C.practice, go('practice'), { icon: '⟳' }), button(C.race, go('race'), { icon: '🏁', class: 'primary', key: 'Enter' })];
     if (save.owner?.engineering && !grid && save.owner.engineering.advanced !== `${save.season}:${round}`) {
       const advance = () => { advanceToWeekend(save); this.game.career.write(); this.render(); };
       this.primary = advance;
@@ -514,7 +529,8 @@ export class CareerScreen implements Screen {
       h('div', { class: 'setup-assists' }, h('span', { class: 'label', text: label }), h('span', { class: 'assists-summary', text: summary }), button(open, act, { icon, class: 'compact' }));
     return [
       h('div', { class: 'career-track' }, h('div', { class: 'career-track-name', text: t.def.name }), h('div', { class: 'career-track-info', text: info })),
-      h('p', { class: 'career-status', text: grid ? fmt(C.raceHint, { pos: ord(place), n: grid.length }) : fmt(C.qualifyingHint, { n: AI.qualifyingLaps }) }),
+      sprintWeekend ? h('p', { class: 'career-status career-sprint', text: `${C.sprintWeekend}: ${fmt(C.sprintWeekendHint, { n: sprintLaps(laps) })}` }) : null,
+      h('p', { class: 'career-status', text: grid ? fmt(next === 'sprint' ? C.sprintHint : sprintWeekend ? C.gpHint : C.raceHint, { pos: ord(place), n: grid.length }) : fmt(C.qualifyingHint, { n: AI.qualifyingLaps, out: knockoutOut(lineup(save).length) }) }),
       gridList,
       h('div', { class: 'field' }, h('span', { class: 'label', text: C.tyres }), tyres.el),
       line(STR.assists.title, assistsSummary(settings().assists), STR.assists.open, '🛞', () => this.assistsPanel.open(this.game.ui, () => this.render())),
@@ -676,7 +692,10 @@ export class CareerScreen implements Screen {
       .map((e) => ({ id: e.id, name: e.name, paint: e.team.paint, ...(e.team.secondary !== undefined ? { secondary: e.team.secondary } : {}), difficulty: aiDifficulty(save, round, e.id), tune: carPerformance(save, e.id), box: teams.findIndex((t) => t.id === e.team.id), failAt: fails[e.id] }))
       .sort((a, b) => b.difficulty - a.difficulty);
     const practice = session === 'practice';
-    const laps = raceLaps(save.length, trackLapTime(t));
+    // The race this session leads to: qualifying goes on to the sprint on a sprint weekend (until it's run), else to the Grand Prix.
+    const sprint = session === 'sprint' || (session === 'qualifying' && sprintRound(save, round) && !save.sprint);
+    const gpLaps = raceLaps(save.length, trackLapTime(t));
+    const laps = sprint ? sprintLaps(gpLaps) : gpLaps;
     const setup: RaceSetup = {
       mode: practice ? 'practice' : 'race',
       laps,
@@ -700,20 +719,35 @@ export class CareerScreen implements Screen {
       title: fmt(STR.career.roundOf, { round: round + 1, rounds: save.calendar.length }),
       you: { id: controlled.id, name: controlled.name, paint: mine.paint, ...(mine.secondary !== undefined ? { secondary: mine.secondary } : {}), box: teams.findIndex((t) => t.id === mine.id) },
       car: playerCar(save),
-      tyreLife: tyreLife(laps, trackTyreLife(t)),
+      tyreLife: tyreLife(gpLaps, trackTyreLife(t)),
       field,
       // (Qualifying again starts from no grid.)
-      grid: session === 'race' ? save.grid : null,
+      grid: session === 'race' || session === 'sprint' ? save.grid : null,
+      // (The Grand Prix in the dry: two different dry tyres, or disqualified.)
+      twoCompounds: !practice && !sprint,
       qualified: (order) => {
         setGrid(save, order);
         this.game.career.write();
       },
-      finished: (result) => this.finished(save, round, t, result),
+      finished: (result) => (sprint ? this.sprintFinished(save, round, t, result) : this.finished(save, round, t, result)),
       practised: (time) => { if (session === 'practice' && nextRound(save) === round && !save.grid) { awardPractice(save, time, trackLapTime(t)); this.game.career.write(); } },
       leave: () => this.game.go('career'),
     };
     this.game.setTrack(t);
     this.game.startEvent(spec);
+  }
+
+  /** The sprint is over: its result kept for the round (the Grand Prix's grid), saved, and on show. */
+  private sprintFinished(save: CareerSave, round: number, t: Track, result: EventResult): void {
+    if (nextRound(save) !== round) return;
+    const sprint = recordSprint(save, result);
+    if (sprint) {
+      this.game.career.write();
+      const times = new Map(result.order.map((id, i) => [id, { time: result.times[i] ?? null, laps: result.laps[i] ?? 0 }]));
+      this.shown = { round, track: t.def.name, sprint: true, result: { order: sprint.order, dnf: sprint.dnf, fastest: null, pole: null }, times, estimated: result.estimated };
+    }
+    this.tab = 'race';
+    this.game.go('career');
   }
 
   /** The race is over: into the standings, saved, and its result on show. */
@@ -736,21 +770,26 @@ export class CareerScreen implements Screen {
     const r = shown.result;
     const names = new Map(lineup(save).map((e) => [e.id, e]));
     const winner = shown.times.get(r.order[0]);
-    const place = r.order.indexOf(save.owner?.selected ?? YOU_ID) + 1;
-    const out = r.dnf.includes(save.owner?.selected ?? YOU_ID);
-    const pts = out ? 0 : pointsFor(place);
-    const headline = out ? C.retired : place === 1 ? C.won : pts > 0 ? fmt(C.finishedPoints, { pos: ord(place), pts }) : fmt(C.finished, { pos: ord(place) });
+    const me = save.owner?.selected ?? YOU_ID;
+    const place = r.order.indexOf(me) + 1;
+    const dsqd = !!r.dsq?.includes(me);
+    const out = r.dnf.includes(me) || dsqd;
+    const worth = (p: number) => (shown.sprint ? sprintPointsFor(p) : pointsFor(p));
+    const pts = out ? 0 : worth(place);
+    const headline = dsqd ? C.disqualified : out ? C.retired : place === 1 ? (shown.sprint ? C.wonSprint : C.won) : pts > 0 ? fmt(C.finishedPoints, { pos: ord(place), pts }) : fmt(C.finished, { pos: ord(place) });
     const rows = r.order.map((id, i) => {
       const e = names.get(id) as Entrant | undefined;
-      const dnf = r.dnf.includes(id);
+      const dsq = !!r.dsq?.includes(id);
+      const dnf = r.dnf.includes(id) || dsq;
       const x = shown.times.get(id);
       let time = '';
-      if (dnf) time = STR.results.dnf;
+      if (dsq) time = C.dsq;
+      else if (dnf) time = STR.results.dnf;
       else if (x && x.time !== null && winner && winner.time !== null) {
         const down = winner.laps - x.laps;
         time = i === 0 ? formatTime(x.time) : down > 0 ? fmt(down === 1 ? STR.results.lapDown : STR.results.lapsDown, { n: down }) : fmt(STR.results.gap, { t: (x.time - winner.time).toFixed(2) });
       }
-      const got = dnf ? 0 : pointsFor(i + 1);
+      const got = dnf ? 0 : worth(i + 1);
       return h(
         'tr',
         { class: `${e?.you ? 'you' : ''}${dnf ? ' dnf' : ''}`.trim() },
@@ -763,16 +802,16 @@ export class CareerScreen implements Screen {
     });
     const next = () => {
       this.shown = null;
-      this.tab = nextRound(save) === null ? 'race' : 'drivers';
+      this.tab = shown.sprint || nextRound(save) === null ? 'race' : 'drivers';
       this.showTrack();
       this.render();
     };
     this.primary = next;
     return [
-      this.header(save, fmt(C.resultTitle, { round: shown.round + 1, track: shown.track })),
+      this.header(save, fmt(shown.sprint ? C.sprintResultTitle : C.resultTitle, { round: shown.round + 1, track: shown.track })),
       h('p', { class: `career-headline${out ? ' bad' : place <= 3 ? ' good' : ''}`, text: headline }),
       shown.estimated ? h('p', { class: 'setup-hint', text: C.asItStood }) : null,
-      save.owner ? campaignDebrief(save) : null,
+      save.owner && !shown.sprint ? campaignDebrief(save) : null,
       h(
         'div',
         { class: 'career-body' },
@@ -783,7 +822,7 @@ export class CareerScreen implements Screen {
           h('tbody', {}, ...rows),
         ),
       ),
-      h('div', { class: 'menu row setup-buttons career-foot' }, this.game.lastReplay ? button(STR.replay.open, () => { this.toReplay = true; this.game.watchReplay('career'); }, { icon: '🎬' }) : null, button(C.continue, next, { icon: '▶', class: 'primary', key: 'Enter' })),
+      h('div', { class: 'menu row setup-buttons career-foot' }, this.game.lastReplay ? button(STR.replay.open, () => { this.toReplay = true; this.game.watchReplay('career'); }, { icon: '🎬' }) : null, button(shown.sprint ? C.sprintNext : C.continue, next, { icon: '▶', class: 'primary', key: 'Enter' })),
     ];
   }
 

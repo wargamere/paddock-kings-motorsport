@@ -523,6 +523,34 @@ body {
   height: clamp(64px, 20vh, 130px);
 }
 
+/* The overtake boost, held (a race with DRS and the boost). */
+.touch-boost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
+  width: clamp(60px, 10vw, 100px);
+  height: clamp(52px, 15vh, 96px);
+  border: 3px solid rgba(255, 211, 77, 0.85);
+  border-radius: 1.2rem;
+  background: rgba(14, 18, 28, 0.38);
+  color: #ffd34d;
+  font-weight: 900;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-boost[hidden] {
+  display: none;
+}
+
+.touch-boost.active {
+  background: rgba(255, 211, 77, 0.45);
+  transform: scale(0.96);
+}
+
 .touch-shifts {
   display: flex;
   flex-direction: column;
@@ -2844,6 +2872,75 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   display: none;
 }
 
+/* DRS and the overtake boost's battery. */
+.hud-power {
+  flex-basis: 100%;
+  contain: inline-size;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.hud-power[hidden] {
+  display: none;
+}
+
+.drs-chip {
+  flex: none;
+  padding: 0.05em 0.45em;
+  border: 0.15em solid #6b7280;
+  border-radius: 0.35em;
+  color: #9ca3af;
+  font-size: 0.68rem;
+  font-weight: 900;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.drs-chip.armed {
+  border-color: #f5b301;
+  color: #ffd34d;
+}
+
+.drs-chip.open {
+  border-color: #22c55e;
+  background: #22c55e;
+  color: #06280f;
+}
+
+.ers-label {
+  flex: none;
+  color: #ffd34d;
+}
+
+.ers-bar {
+  flex: 1;
+  height: 0.45rem;
+  min-width: 2.5rem;
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+
+.ers-fill {
+  height: 100%;
+  width: 100%;
+  background: #ffd34d;
+}
+
+.hud-power.boosting .ers-fill {
+  background: #fff3b0;
+  box-shadow: 0 0 0.5rem #ffd34d;
+}
+
+.hud-power.boosting .ers-label {
+  color: #fff3b0;
+  text-shadow: 0 0 0.4rem #ffd34d;
+}
+
 /* A tyre's kind: its letter in a ring of its colour (soft red, medium yellow, hard white, wet blue). */
 .tyre-chip {
   --tyre: #f2b705;
@@ -3386,6 +3483,31 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
 
 .standings li.dnf {
   opacity: 0.6;
+}
+
+/* Knockout qualifying: the cars out after a session. */
+.standings li.out {
+  opacity: 0.55;
+}
+
+.standing-out {
+  margin-left: auto;
+  padding: 0 0.35em;
+  border-radius: 0.3rem;
+  background: var(--error, #c0392b);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.standing-out + .standing-time {
+  margin-left: 0.5rem;
+}
+
+/* A sprint weekend, in the paddock. */
+.career-status.career-sprint {
+  color: #b5470b;
 }
 
 /* Twenty cars on the grid after qualifying: two columns. */

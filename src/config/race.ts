@@ -729,6 +729,8 @@ export const ENGINEER = {
   show: 6.5,
   stale: 8,
   startAfter: 14,
+  /** The two-compound reminder, this long after the start (s). */
+  ruleAfter: 4,
   boxEarly: 0.15,
   planFrom: 3.5,
   undercutGap: 3,
@@ -737,4 +739,86 @@ export const ENGINEER = {
   damageWarn: 0.75,
   /** Lap-to-lap change in a gap (s) worth mentioning. */
   trend: 0.15,
+} as const;
+
+/**
+ * Knockout qualifying (race/knockout.ts) in a championship round of at least
+ * `minCars`: Q1, Q2 and Q3, AI.qualifyingLaps timed laps each. After Q1 and
+ * after Q2 the slowest `outShare` of the field (5 of 20) are out, in the
+ * places they qualified. The track gets quicker as it rubbers in: every car's
+ * lap is `evolution` quicker each session.
+ */
+export const KNOCKOUT = {
+  minCars: 10,
+  outShare: 0.25,
+  evolution: 0.002,
+} as const;
+
+/**
+ * DRS (race/drs.ts): zones on the longest straights (at most `maxZones`,
+ * each at least `minLength` m of road where nothing holds the quickest car
+ * below `flat` of its top speed; every track gets its longest straight of at
+ * least `shortest` m), from `startAfter` m past the bend before to
+ * `endBefore` m before the braking for the next.
+ * A car within `gap` s of the car ahead at a zone's detection point
+ * (`detect` m before it) may open its flap in that zone, from the second
+ * lap, in the dry (road wetter than `wetFrom`: off) and never behind the
+ * safety car. Open, it cuts the drag by `dragCut` and lets the car run
+ * `top` faster; it opens by itself at full throttle and shuts on the brakes.
+ */
+export const DRS = {
+  gap: 1,
+  fromLap: 2,
+  minLength: 200,
+  shortest: 110,
+  flat: 0.9,
+  maxZones: 2,
+  startAfter: 15,
+  endBefore: 15,
+  detect: 80,
+  dragCut: 0.3,
+  top: 0.05,
+  wetFrom: 0.35,
+} as const;
+
+/**
+ * The overtake boost (an ERS battery): held, it pushes `push` m/s² more and
+ * lets the car run `top` faster, using `drain` of the battery a second (a
+ * full one lasts about 8 s); braking charges it, `harvest` a second at full
+ * braking. Every car starts the race with a full battery. The AI uses it to
+ * pass (closing on a car within `attack` m, on a straight) and to defend
+ * (a car within `defend` m behind), keeping `reserve` back until the last lap.
+ */
+export const ERS = {
+  push: 2.4,
+  top: 0.04,
+  drain: 0.125,
+  harvest: 0.16,
+  attack: 30,
+  defend: 14,
+  reserve: 0.3,
+} as const;
+
+/**
+ * How damage looks (car/model.ts, render/effects.ts): the front bumper hangs
+ * from `frontHang` front-wing damage and is gone from `frontGone`; the rear
+ * wing is bent from `rearBent` bodywork damage and gone from `rearGone`;
+ * scuffs show from `scuffs`. From `smokeFrom` damage the car smokes, more
+ * the worse it is (and black once it's broken down). A hanging bumper
+ * throws sparks above `sparkSpeed` m/s; hits over `sparkHit` m/s spark too,
+ * and over `debrisHit` m/s leave bits of car on the road (for `debrisLife` s).
+ */
+export const DAMAGE_LOOK = {
+  frontHang: 0.25,
+  frontGone: 0.6,
+  rearBent: 0.3,
+  rearGone: 0.7,
+  scuffs: 0.15,
+  smokeFrom: 0.45,
+  sparkSpeed: 10,
+  sparkHit: 4,
+  debrisHit: 12,
+  debrisLife: 14,
+  /** Sliding faster than this (m/s) sideways smokes the tyres. */
+  tyreSmokeSlip: 3.5,
 } as const;

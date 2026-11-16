@@ -15,6 +15,8 @@ export interface TouchState {
   steer: number;
   /** Gear changes asked for by the ▲ ▼ buttons and not yet made (+ up, - down). */
   shift: number;
+  /** The BOOST button held. */
+  boost: boolean;
 }
 
 /** Bound actions that fire once per press (the rest are held). */
@@ -38,7 +40,7 @@ export class InputManager {
   onAction: (a: InputAction) => void = () => {};
   /** The device used most recently (the HUD shows matching hints). */
   lastDevice: InputDevice = 'keyboard';
-  readonly touch: TouchState = { throttle: false, brake: false, steer: 0, shift: 0 };
+  readonly touch: TouchState = { throttle: false, brake: false, steer: 0, shift: 0, boost: false };
   /** Gear changes asked for (keyboard and gamepad) and not yet made. */
   private shifts = 0;
   /** The key bindings in use, and what each key does (rebuilt when they change). */
@@ -56,7 +58,7 @@ export class InputManager {
   }
 
   private readonly keys = new Set<string>();
-  private readonly pad: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  private readonly pad: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false, boost: false };
   private padPressed: boolean[] = [];
   private abort: AbortController | null = null;
 
@@ -83,6 +85,7 @@ export class InputManager {
     this.touch.brake = false;
     this.touch.steer = 0;
     this.touch.shift = 0;
+    this.touch.boost = false;
     this.shifts = 0;
   }
 
@@ -118,6 +121,7 @@ export class InputManager {
     const p = this.pad;
     if (!gp) {
       p.throttle = p.brake = p.steer = 0;
+      p.boost = false;
       this.padPressed = [];
       return;
     }
@@ -129,6 +133,7 @@ export class InputManager {
     p.steer = clamp(stick + dpad, -1, 1);
     p.throttle = Math.max(dz(btn(PAD.rt), INPUT.triggerDeadZone), pressed(PAD.a) ? 1 : 0);
     p.brake = Math.max(dz(btn(PAD.lt), INPUT.triggerDeadZone), pressed(PAD.x) ? 1 : 0);
+    p.boost = pressed(PAD.b);
     if (p.steer || p.throttle || p.brake) this.lastDevice = 'gamepad';
     for (const [i, dir] of [[PAD.rb, 1], [PAD.lb, -1]] as const) {
       if (pressed(i) && !this.padPressed[i]) {
@@ -155,6 +160,7 @@ export class InputManager {
     out.brake = Math.max(held(b.brake) ? 1 : 0, this.pad.brake, t.brake ? 1 : 0);
     out.steer = clamp(keySteer + this.pad.steer + t.steer, -1, 1);
     out.handbrake = false; // the handbrake is switched off for now
+    out.boost = held(b.boost) || !!this.pad.boost || t.boost;
     // One gear change per tick, so quick presses go through one after the other.
     const want = this.shifts + t.shift;
     out.shift = Math.sign(want);

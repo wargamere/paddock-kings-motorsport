@@ -22,6 +22,7 @@ export class TouchControls {
   private readonly steerPointers = new Map<number, number>();
   private abort = new AbortController();
   private readonly shiftBox: HTMLElement;
+  private readonly boostBtn: HTMLElement;
 
   constructor(state: TouchState) {
     this.state = state;
@@ -37,7 +38,10 @@ export class TouchControls {
     down.setAttribute('aria-label', STR.race.shiftDown);
     this.shiftBox = h('div', { class: 'touch-shifts' }, up, down);
     this.shiftBox.hidden = true;
-    this.root = h('div', { class: 'touch-controls' }, steer, h('div', { class: 'spacer' }), this.shiftBox, brake, gas);
+    // The overtake boost (a race with DRS and the boost): held.
+    this.boostBtn = h('div', { class: 'touch-boost', text: STR.race.touchBoost });
+    this.boostBtn.hidden = true;
+    this.root = h('div', { class: 'touch-controls' }, steer, h('div', { class: 'spacer' }), this.shiftBox, this.boostBtn, brake, gas);
 
     const o = { signal: this.abort.signal };
     const sideOf = (e: PointerEvent) => {
@@ -82,6 +86,7 @@ export class TouchControls {
     }
     this.pedal(gas, (v) => (this.state.throttle = v));
     this.pedal(brake, (v) => (this.state.brake = v));
+    this.pedal(this.boostBtn, (v) => (this.state.boost = v));
     for (const [el, dir] of [[up, 1], [down, -1]] as const) {
       el.addEventListener(
         'pointerdown',
@@ -131,6 +136,11 @@ export class TouchControls {
     this.shiftBox.hidden = !on;
   }
 
+  /** Shows the BOOST button (a race with the overtake boost). */
+  setBoost(on: boolean): void {
+    this.boostBtn.hidden = !on;
+  }
+
   /** Lifts every finger (e.g. on pause). */
   release(): void {
     this.steerPointers.clear();
@@ -138,6 +148,7 @@ export class TouchControls {
     this.state.throttle = false;
     this.state.brake = false;
     this.state.shift = 0;
+    this.state.boost = false;
     for (const el of this.root.querySelectorAll('.active')) el.classList.remove('active');
   }
 

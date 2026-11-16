@@ -52,7 +52,8 @@ src/
   render/     view3d.ts (renderer, sky, ground, hills, lights), textures.ts
               (procedural canvas textures), geom.ts (merge/tint helpers),
               racingLineOverlay.ts (the racing line assist), rain.ts (rain),
-              pitBoxMesh.ts (the pit box on the road)
+              pitBoxMesh.ts (the pit box on the road), effects.ts and
+              carEffects.ts (smoke, sparks and bits of car)
   car/        physics.ts (fixed-step arcade physics), gearbox.ts (six gears),
               tyres.ts (kinds of tyre, wear curve),
               bindings.ts (keyboard keys),
@@ -68,7 +69,8 @@ src/
               strategy.ts (tyre life per track, AI tyre choices), classify.ts (race order),
               replay.ts (recording a race, its moments and highlights),
               replayScreen.ts (watching it back with TV cameras),
-              engineer.ts (your race engineer on the radio)
+              engineer.ts (your race engineer on the radio), drs.ts (DRS zones
+              and who may open the flap), knockout.ts (Q1, Q2 and Q3)
   ui/         dom helpers, menuScreen.ts (main menu), setupPanel.ts (car setup), raceSetupScreen.ts (race
               setup), assistsPanel.ts, conditionsPanel.ts (rain, time of day,
               tyre wear), controlsPanel.ts (key bindings), gridOverlay.ts (grid after qualifying), editor overlay, HUD,
@@ -81,7 +83,8 @@ src/
               loading/gameplay events, ads, user, device), crazygames.ts (SDK wrapper),
               storage.ts (key-value store), web.ts (share links, rotate prompt)
   career/     career.ts (the championship's rules: seasons, points, standings,
-              the AI's pace and the weather per round, what's saved)
+              the AI's pace and the weather per round, sprint weekends, what's
+              saved), points.ts (Grand Prix and sprint points)
   main.ts     state machine: MENU (boot) → SETUP → RACE (practice or race) →
               RESULTS, with EDITOR, PREVIEW and LIBRARY; and CAREER, which
               hands each round to RACE
@@ -122,6 +125,7 @@ Physics runs at a fixed 120 Hz from an accumulator (`core/fixedStep.ts`), and re
 | Camera (chase / bonnet) | C | Y | — |
 | Pause | Esc / P | Start | Ⅱ button |
 | Timing tower (full / compact / hidden) | T | — | tap it (full / compact) |
+| Overtake boost (a race with AI cars; hold) | Space | B | BOOST button |
 
 **Your own keys** (`car/bindings.ts`, `ui/controlsPanel.ts`). The keyboard keys above are the defaults. ⌨ Controls, in the main menu and the pause menu, changes them: every driving action (drive, brake, steer left and right, gear up and down, reset, camera, pause, sound, timing tower) has two keys. Click one and press the new key; Esc cancels and Backspace clears it. A key already used by another action moves over, and the panel says from where. Reset to defaults puts them all back. Esc always pauses whatever you set, and Tab, Ctrl, Alt and the system keys can't be bound. Keys are physical keys (`KeyboardEvent.code`), shown as your keyboard layout prints them where the browser can say (Z for W on AZERTY). The race's controls hint, the pause menu and the assists panel all show your keys. The gamepad and touch controls don't change.
 
@@ -558,6 +562,21 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
   - **At 100 % the car breaks down on the spot** (`CarPhysics.broken`): no drive, it stops where it is and stays there whatever you press.
     - In a race you've retired: *DNF* on the results, no place, no time. The same goes for an AI car, which shows *OUT* at the foot of the timing tower.
     - A retired AI car stands where it stopped for 9 s (`DAMAGE.recoverAfter`): that's yellow flags, and with the safety car on, the safety car. Then the marshals take it away and it's in nobody's way (a test runs twenty cars past one at Spielberg: the other nineteen finish).
+  - **You can see it** (`car/model.ts`, `render/effects.ts`, `render/carEffects.ts`; numbers in `DAMAGE_LOOK`). Every car, yours and the AI's:
+    - The front bumper hangs off one side from 25 % front-wing damage, scraping the road and throwing sparks at speed, and is gone from 60 % (the bare crash structure shows). The rear wing bends from 30 % bodywork damage and is gone from 70 %. Scuffs show from 15 %.
+    - A part coming off leaves bits of car on the road (in its paint and dark trim), which bounce, slide and lie there for 14 s. So does a hard hit (over 12 m/s); any hit over 4 m/s sparks.
+    - From 45 % damage the car smokes, more the worse it gets; once it's broken down, black smoke. Sliding hard smokes the tyres (worn-out tyres sooner).
+    - All of it is three draw calls (two pools of point sprites and one of little boxes), whatever the field. Smoke right in front of the camera fades and bits of car within 2.5 m aren't drawn, so neither fills the screen.
+
+### DRS and the overtake boost
+
+In a race with AI cars (`race/drs.ts`, `config/race.ts` `DRS` and `ERS`):
+
+- **DRS zones** are the track's longest straights, where nothing holds the quickest car below 90 % of its top speed for at least 200 m (at most two; every real circuit has at least one). A zone starts 15 m after the bend before it and ends 15 m before the braking for the next.
+- **Detection:** cross a zone's detection point (80 m before it) within 1 s of the car ahead and you're cleared for that zone: the DRS light on the HUD goes amber. In the zone the flap opens by itself at full throttle (green) and shuts the moment you brake: 30 % less drag and up to 5 % more top speed. DRS is enabled from the second lap, in the dry, and never behind the safety car; your race engineer tells you when it's on.
+- **The overtake boost** (hold Space, B on a gamepad, BOOST on a touch screen): 2.4 m/s² more push and up to 4 % more top speed while the battery lasts (about 8 s from full). Braking charges it. Everyone starts with a full battery; the HUD shows yours under the tyres.
+- **The AI uses both:** DRS where it's cleared, and the boost on a straight at full throttle to pass a car within 30 m or keep one within 14 m behind, keeping 30 % back until the last lap.
+- **Tests:** `tests/drs.test.ts` (zones on every real circuit, detection and clearance tick by tick, DRS and the boost on a straight, charging, damage looks).
     - In practice it's only a message: reset the car (R) for a fresh one.
 - **The chequered flag** (`RaceSession.flagged`, every race with AI cars). Once anyone has finished, every other car finishes the next time it crosses the line, however many laps it has done. A lapped car is classified "+1 lap" instead of being left to drive them all, and that goes for you too.
   - The order (`race/classify.ts`) is by distance covered; of two cars that finished on the same lap, the one home first; retirements last, the one that got furthest first.
@@ -587,6 +606,8 @@ In every race (not practice) your race engineer talks to you on the radio (`race
 - **The undercut.** A car within 3 s behind you pits: if your own stop is near, *box this lap to cover the undercut*; otherwise *stay out and push*. A car close ahead pits: *Push now, clear air.*
 - **The safety car.** Out: hold position, or *box, box: it's a cheap stop* when a stop is due and your tyres are past their best. In this lap: get ready for the restart.
 - **Each lap:** your position, the gaps to the cars ahead and behind, and whether they're closing. Also the start (places gained or lost), rain on the way, the car's damage (one more hit could end your race), *Good stop, you're out in P7* after a stop, the last lap and the result.
+- **The two-compound rule** (a career Grand Prix): a reminder at the start, *box this lap, we still have to run a second compound* about half-way (for a different dry kind), and a warning once it's too late. The tyres it plans are always ones that keep the rule.
+- **DRS enabled**, once it is (from the second lap).
 - In a race the engineer's tyre calls replace the HUD's own tyre warnings (practice keeps those).
 - **Tests:** `tests/engineer.test.ts` (box calls and their tyres, staying out, weather and damage, the plan, pacing, the safety car, undercuts, gaps, the flag).
 
@@ -619,13 +640,15 @@ Every race (not practice) is recorded as it's run (`race/replay.ts`, numbers in 
 - **A season** is 8, 16 or 24 rounds on the real circuits, in the order of the real calendar (Melbourne first, Yas Marina last). Shorter seasons take an even spread of it, a different one each year, so three 8-race seasons visit all 24.
 - **A race weekend.**
   - *Practice* (optional): alone on the track, no tyre wear or damage.
-  - *Qualifying:* two timed laps alone set where you start; the AI cars' laps are simulated at their own pace meanwhile. The grid is saved, so you can go back to the paddock and race later, or qualify again.
+  - *Qualifying* is a knockout, as in the real thing (`race/knockout.ts`): Q1, Q2 and Q3, two timed laps alone in each; the AI cars' laps are simulated at their own pace (once, in Q1; a little different in each session, and 0.2 % quicker each time as the track rubbers in). The slowest five of twenty are out after Q1 and after Q2, starting where they qualified; Q3 decides pole. Between sessions the classification shows who's out. Knocked out, or Skip qualifying, and the rest is run without you. The grid is saved, so you can go back to the paddock and race later, or qualify again.
+  - *Sprint weekends:* about one round in four (two in an 8-round season, four in 16, six in 24; never the first or the last; the paddock says so). Qualifying sets the sprint's grid; the sprint (a third of the race's laps, at least two; no two-compound rule) sets the Grand Prix's, and pays 8, 7, 6, 5, 4, 3, 2, 1 to the top eight. Pole stays qualifying's. The sprint's result has its own screen; then *Start the Grand Prix*.
+  - *The two-compound rule:* in a dry Grand Prix every car must race on two different dry tyres (soft, medium, hard). A car that runs wets at all is exempt. Finish on one kind and you're disqualified: *DSQ*, no points, classified last. The AI keeps the rule (a stop about half-way if its tyres would otherwise last), and your race engineer reminds you at the start, calls you in for it about half-way, and warns you once it's too late.
   - *The race:* about 4, 8 or 16 minutes, so the laps differ from track to track (more on a short one), as the real distance is the same everywhere.
   - Tyre wear with pit stops, damage and the safety car are always on. Teammates share a pit box. In a long race the tyres last longer (mediums at least 40 % of the distance), so it's still one or two stops, not four.
   - The weather is drawn for each round: mostly dry, sometimes rain on the way, now and then rain all race. The paddock shows the forecast, and suggests wets when it's raining.
   - Each AI car has a 3 % chance a race of a mechanical failure: it breaks down and retires, like a car damaged all the way. Never yours.
 - **When your race is over** (finished, or broken down) the rest of the field races on to the flag, fast-forward, seen from the car in front, because every car's result counts for the standings. *Results* (Enter) cuts it short: everyone still racing is placed as they stand.
-- **Points** are the real ones: 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 for the top ten. A car that retires scores nothing.
+- **Points** are the real ones: 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 for the top ten, plus the sprint's 8 to 1 for its top eight (`career/points.ts`; the standings, the team's prize money and the season review all count both). A car that retires or is disqualified scores nothing. Wins, podiums and the countback are the Grands Prix'.
   - *Drivers' championship:* the most points; level on points, the most wins, then the most 2nd places, and so on.
   - *Constructors' championship:* each team's two cars together.
 - **The owner hub** follows a dark motorsport presentation: top navigation, season timeline, next-event card, two driver cards and a live studio view of the race car. Keys 1–8 open Overview, Drivers, Development, Facilities, Vehicle, Standings, Finance and My team. Overview includes an SVG map of the actual circuit, weather briefing, race distance, both driver cards, recent operations and a draggable studio car display. The calendar and career settings remain reachable from the footer on phones. Overview’s expandable weekend setup contains tyres, assists, car setup and the saved grid. Practice and qualifying/race actions stay in the footer.
@@ -634,7 +657,7 @@ Every race (not practice) is recorded as it's run (`race/replay.ts`, numbers in 
 - **Commercial operations:** choose Atlas Systems ($1m per race + $35k per team point), Vector Energy ($700k + $45k per point + $450k when the team scores at least 10 points), or Meridian Group ($1.3m + $15k per point). Contracts lock after the season’s first race and reopen next season. Headquarters income is additional. The Finance tab tracks funds, lifetime income and investments, and the latest 20 transactions. Existing owner saves retain the Atlas payout scheme and migrate without losing active projects.
 - **Owner season records:** history follows the highest-placed driver on your team, independently of who you selected to control. The season objective is set when you take ownership and refreshed at the start of the next season.
 - **Migration:** opening an old driver career converts its player seat to the team’s second named driver, retaining all results, retirements, fastest laps, poles, the saved grid and past seasons. It does not reset the championship.
-- **Tests:** `tests/carDevelopment.test.ts` (one scale, rival development, the development race, circuits), `tests/owner.test.ts` (budgets, development, switching drivers, migration and save validation), `tests/career.test.ts` (the rules), `tests/careerUI.test.ts` (the screen, start to season's end) and `tests/retire.test.ts` (breakdowns, the flag, the order).
+- **Tests:** `tests/f1Weekend.test.ts` (sprint rounds, sprint grids and points, saving them, knockout sessions and grids, the two-compound rule and the AI keeping it), `tests/carDevelopment.test.ts` (one scale, rival development, the development race, circuits), `tests/owner.test.ts` (budgets, development, switching drivers, migration and save validation), `tests/career.test.ts` (the rules), `tests/careerUI.test.ts` (the screen, start to season's end) and `tests/retire.test.ts` (breakdowns, the flag, the order).
 
 ### Create your own team
 
@@ -735,6 +758,9 @@ Tested against the real SDK in its `local` mode (localhost): the SDK's own log s
 - [x] A real pit lane: ramps off and back on, a pit wall, a box for each car, and a 60 km/h limiter
 - [x] A race engineer on the radio: when to box and for which tyres, the weather, the safety car, undercuts, gaps
 - [x] Race replays: highlights or the whole race, TV / chase / onboard / helicopter cameras
+- [x] A real F1 weekend in the career: knockout qualifying, sprint weekends, the two-compound rule
+- [x] DRS zones and an overtake boost, for you and the AI
+- [x] Damage you can see: hanging bumpers, missing wings, smoke, sparks and bits of car
 
 ## Validation for the track editor
 

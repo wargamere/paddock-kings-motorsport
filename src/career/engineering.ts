@@ -1,9 +1,9 @@
-import { CAREER } from '../config/career.ts';
 import { DEVELOPMENT } from '../config/development.ts';
 import { clamp } from '../core/math.ts';
 import { hashString, rng } from '../core/random.ts';
 import type { CareerSave } from './career.ts';
 import { driverProgress, researchDiscount, researchMultiplier, staffMember } from './dynasty.ts';
+import { roundPoints } from './points.ts';
 import { driverDef, teamsFor } from './roster.ts';
 
 export type EngineeringArea = 'aero' | 'chassis' | 'powertrain' | 'durability';
@@ -144,7 +144,7 @@ export function teamDevelopment(save: Pick<CareerSave, 'owner'> & Partial<Pick<C
 export function resourceIncome(save: CareerSave): number {
   const scores = teamsFor(save).map((t) => {
     const places: number[] = []; let points = 0;
-    for (const r of save.done) for (const id of t.drivers) { const index = r.order.indexOf(id); if (index >= 0 && !r.dnf.includes(id)) { points += CAREER.points[index] ?? 0; places[index] = (places[index] ?? 0) + 1; } }
+    for (const r of save.done) for (const id of t.drivers) { points += roundPoints(r, id); const index = r.order.indexOf(id); if (index >= 0 && !r.dnf.includes(id) && !r.dsq?.includes(id)) places[index] = (places[index] ?? 0) + 1; }
     return { id: t.id, points, places };
   });
   scores.sort((a, b) => { if (a.points !== b.points) return b.points - a.points; for (let i = 0; i < 24; i++) { const difference = (b.places[i] ?? 0) - (a.places[i] ?? 0); if (difference) return difference; } return 0; });

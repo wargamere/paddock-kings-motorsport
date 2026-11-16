@@ -1,6 +1,7 @@
 import { CAREER, YOU_ID } from '../config/career.ts';
 import type { CareerSave, RoundResult } from './career.ts';
 import { teamsFor } from './roster.ts';
+import { roundPoints } from './points.ts';
 import { cleanDynasty, createDynasty, researchDiscount, researchDuration, researchMultiplier, weekendApproach, type DynastyState } from './dynasty.ts';
 import { cleanEngineering, type EngineeringState } from './engineering.ts';
 
@@ -67,10 +68,13 @@ export function takeOwnership(save: CareerSave): OwnerState {
   for (const r of save.done) {
     r.order = r.order.map(replace);
     r.dnf = r.dnf.map(replace);
+    if (r.dsq) r.dsq = r.dsq.map(replace);
+    if (r.sprint) r.sprint = { order: r.sprint.order.map(replace), dnf: r.sprint.dnf.map(replace) };
     if (r.fastest) r.fastest = replace(r.fastest);
     if (r.pole) r.pole = replace(r.pole);
   }
   if (save.grid) save.grid = save.grid.map(replace);
+  if (save.sprint) save.sprint = { order: save.sprint.order.map(replace), dnf: save.sprint.dnf.map(replace), pole: save.sprint.pole && replace(save.sprint.pole) };
   const target = Object.values(save.cars).filter((rating) => rating > save.cars[save.team]).length + 1;
   const owner: OwnerState = { selected: seats[1], cash: 8_000_000, earned: 0, spent: 0, development: 0, facilities: 0, project: false, target };
   save.owner = owner; owner.world = createDynasty(save); return owner;
@@ -138,10 +142,7 @@ export function settleOwnerRound(save: CareerSave, result: RoundResult): void {
   const o = save.owner;
   if (!o) return;
   const seats = teamsFor(save).find((t) => t.id === save.team)!.drivers;
-  const pts = seats.reduce((n, id) => {
-    const pos = result.order.indexOf(id);
-    return n + (result.dnf.includes(id) || pos < 0 ? 0 : CAREER.points[pos] ?? 0);
-  }, 0);
+  const pts = seats.reduce((n, id) => n + roundPoints(result, id), 0);
   const sponsor = sponsorFor(save);
   const income = sponsor.base + o.facilities * 250_000 + pts * sponsor.perPoint + (sponsor.target && pts >= sponsor.target ? sponsor.bonus : 0);
   o.cash += income;
