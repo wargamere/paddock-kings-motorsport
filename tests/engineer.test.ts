@@ -193,3 +193,10 @@ test('DRS enabled: said once', () => {
   assert.equal(eng.update(view({ time: 60, drs: true }))?.text, E.drsOn);
   assert.equal(eng.update(view({ time: 70, drs: true })), null);
 });
+
+test('the boost: how to use it, once, at the start of a race with other cars', () => {
+  const eng = new RaceEngineer();
+  assert.equal(eng.update(view({ time: ENGINEER.boostAfter - 0.5, lapsDone: 0, boostKey: 'Space' })), null);
+  assert.equal(eng.update(view({ time: ENGINEER.boostAfter, lapsDone: 0, boostKey: 'Space' }))?.text, fmt(E.boostTip, { key: 'Space' }));
+  assert.equal(new RaceEngineer().update(view({ time: 5, lapsDone: 0, cars: 1, ahead: null, behind: null, boostKey: 'Space' })), null, 'alone: no boost');
+});

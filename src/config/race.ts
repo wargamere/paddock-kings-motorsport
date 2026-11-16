@@ -729,6 +729,8 @@ export const ENGINEER = {
   show: 6.5,
   stale: 8,
   startAfter: 14,
+  /** How to use the boost, this long after the start (s). */
+  boostAfter: 2,
   /** The two-compound reminder, this long after the start (s). */
   ruleAfter: 4,
   boxEarly: 0.15,
