@@ -770,8 +770,9 @@ export const KNOCKOUT = {
  * A car within `gap` s of the car ahead at a zone's detection point
  * (`detect` m before it) may open its flap in that zone, from the second
  * lap, in the dry (road wetter than `wetFrom`: off) and never behind the
- * safety car. Open, it cuts the drag by `dragCut` and lets the car run
- * `top` faster; it opens by itself at full throttle and shuts on the brakes.
+ * safety car. Open, it cuts the drag by `dragCut`, pushes `push` m/s² more
+ * and lets the car run `top` faster; it opens by itself at full throttle and
+ * shuts on the brakes.
  */
 export const DRS = {
   gap: 1,
@@ -783,10 +784,60 @@ export const DRS = {
   startAfter: 15,
   endBefore: 15,
   detect: 80,
-  dragCut: 0.3,
-  top: 0.05,
+  dragCut: 0.45,
+  top: 0.09,
+  push: 0.9,
   wetFrom: 0.35,
 } as const;
+
+/**
+ * The real circuits' DRS zones, as in the real world: for each, roughly where
+ * along the lap (0..1 from the start line) each real zone is. Each is put on
+ * the straight there (road where nothing holds the quickest car below
+ * `flat` of its top speed, at least `shortest` m once trimmed) that's nearest,
+ * within `reach` of a lap; one with no straight there is left out. A circuit
+ * not listed gets the usual zones (DRS above).
+ */
+export const DRS_REAL = {
+  flat: 0.8,
+  shortest: 60,
+  reach: 0.06,
+  zones: {
+    'world-bh-2002': [0.95, 0.18, 0.53],
+    'world-sa-2021': [0.97, 0.6, 0.83],
+    'world-au-1953': [0.97, 0.13, 0.5, 0.67],
+    'world-jp-1962': [0.98],
+    'world-cn-2004': [0.68, 0.96],
+    'world-us-2022': [0.36, 0.72, 0.99],
+    'world-it-1953': [0.97],
+    'world-mc-1929': [0.88],
+    'world-ca-1978': [0.5, 0.8, 0.98],
+    'world-es-1991': [0.65, 0.97],
+    'world-at-1969': [0.15, 0.38, 0.97],
+    'world-gb-1948': [0.27, 0.77],
+    'world-hu-1986': [0.15, 0.96],
+    'world-be-1925': [0.12, 0.92],
+    'world-nl-1948': [0.68, 0.97],
+    'world-it-1922': [0.5, 0.96],
+    'world-az-2016': [0.2, 0.86],
+    'world-sg-2008': [0.24, 0.65, 0.99],
+    'world-us-2012': [0.5, 0.97],
+    'world-mx-1962': [0.05, 0.38, 0.77],
+    'world-br-1940': [0.22, 0.92],
+    'world-us-2023': [0.62, 0.95],
+    'world-qa-2004': [0.97],
+    'world-ae-2009': [0.33, 0.55],
+    'world-pt-2008': [0.95],
+    'world-tr-2005': [0.7, 0.97],
+    'world-my-1999': [0.8, 0.95],
+    'world-de-1932': [0.3, 0.99],
+    'world-de-1927': [0.78, 0.99],
+    'world-it-1914': [0.95],
+  } as Record<string, readonly number[]>,
+} as const;
+
+/** Zones drawn on a track in the editor: at most `max`, each at least `shortest` m. */
+export const DRS_CUSTOM = { max: 4, shortest: 40 } as const;
 
 /**
  * The overtake boost (an ERS battery): held, it pushes `push` m/s² more and

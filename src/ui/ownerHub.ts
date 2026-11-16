@@ -7,8 +7,8 @@ import { button, h } from './dom.ts';
 import { circuitMap } from './ownerGraphics.ts';
 import { facilitiesView, financeView, ownerLabel as label, ownerStat as stat, vehicleView } from './ownerOperations.ts';
 import { identityView, recruitmentView } from './teamManagement.ts';
-import { driverDevelopmentView, inboxView, legacyView, personnelView } from './careerCampaign.ts';
-import { currentDecision, driverRating, dynasty, managementOpen } from '../career/dynasty.ts';
+import { driverDevelopmentView, inboxPending, inboxUnread, inboxView, legacyView, personnelView } from './careerCampaign.ts';
+import { currentDecision, currentPress, driverRating, dynasty, managementOpen } from '../career/dynasty.ts';
 import { engineering, PARTS } from '../career/engineering.ts';
 import { engineeringView, practiceProgrammes } from './engineeringScreen.ts';
 import { calendarOpen } from '../career/calendar.ts';
@@ -35,7 +35,12 @@ export function ownerHeader(save: CareerSave, active: OwnerTab, navigate: Action
     const b = focusable(button(name, () => navigate(id), { class: group.root === id ? 'on' : '' }));
     b.setAttribute('aria-label', name);
     if (group.root === id) b.setAttribute('aria-current', 'page');
-    if (id === 'inbox' && managementOpen(save) && currentDecision(save)) b.append(h('span', { class: 'owner-notification', text: '1' }));
+    if (id === 'inbox') {
+      const pending = inboxPending(save), unread = inboxUnread(save);
+      if (pending) b.append(h('span', { class: 'owner-notification', text: String(pending) }));
+      else if (unread) b.append(h('span', { class: 'owner-notification dot', text: '' }));
+      if (pending || unread) b.title = `${pending ? `${pending} waiting for an answer` : `${unread} new`}`;
+    }
     nav.append(b);
   }
   const sub = h('nav', { class: 'owner-subnav' }); sub.setAttribute('aria-label', 'Section pages');
@@ -83,12 +88,13 @@ export function ownerBody(save: CareerSave, round: number, tab: OwnerTab, action
     h('p', { class: 'owner-muted', text: 'Plan upgrades before advancing to the race weekend. Research, manufacturing and fitting are separate steps.' }));
   let content: HTMLElement;
   if (tab === 'race') {
-    const pending = managementOpen(save) ? currentDecision(save) : null, weather = roundWeather(save, round);
+    const pending = managementOpen(save) ? currentDecision(save) : null, press = currentPress(save), weather = roundWeather(save, round);
     const prep = h('details', { class: 'owner-preparation' }, h('summary', { text: 'Weekend setup, practice programmes & starting grid' }), practiceProgrammes(save), ...actions.weekend);
     const ready = Object.values(e.stock).reduce((sum, n) => sum + n, 0);
-    const inbox = h('section', { class: 'owner-next-decision' }, label('TEAM INBOX'), h('h2', { text: pending?.title ?? 'Team up to date' }),
-      h('p', { text: pending ? 'Review the options before qualifying. Your choice affects the team.' : 'Read recent updates and see the consequences of your decisions.' }),
-      focusable(button(pending ? 'Review team decision' : 'Open team inbox', () => actions.navigate('inbox'))));
+    const inbox = h('section', { class: 'owner-next-decision' }, label('TEAM INBOX'), h('h2', { text: pending?.title ?? (press ? 'The press want a word.' : 'Team up to date') }),
+      h('p', { text: pending ? 'Review the options before qualifying, or the default goes through. Your choice affects the team.' : press ? 'Answer their questions before the next race.' : 'Read recent updates and see the consequences of your decisions.' }),
+      focusable(button(pending ? 'Review team decision' : press ? 'Face the press' : 'Open team inbox', () => actions.navigate('inbox'))));
+    if (pending && press) inbox.append(focusable(button('Face the press', () => actions.navigate('inbox'))));
     if (ready) inbox.append(h('p', { class: 'owner-ready-parts', text: `${ready} manufactured ${ready === 1 ? 'part is' : 'parts are'} ready to fit.` }), focusable(button('Assign ready upgrades', () => actions.navigate('upgrades'))));
     const atRisk = e.regulation ? e.researched.filter((id) => PARTS.find((p) => p.id === id)?.area === e.regulation!.area && !e.regulation!.adapted.includes(id)).length : 0;
     if (atRisk) inbox.append(h('p', { class: 'owner-ready-parts', text: `${atRisk} ${atRisk === 1 ? 'design needs' : 'designs need'} regulation adaptation before the final qualifying session.` }), focusable(button('Review regulation changes', () => actions.navigate('development'))));

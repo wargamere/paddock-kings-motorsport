@@ -1,7 +1,7 @@
 import { DEFAULT_OPTIONS, OPTION_CHOICES, THEME_IDS, TRACK, type TrackOptions } from '../config/track.ts';
 import { fromBase64Url, toBase64Url } from '../core/base64.ts';
 import type { Dot } from '../core/math.ts';
-import { cleanExtras, PLACED_KINDS, ROT_STEPS, type Placed, type TrackExtras } from './extras.ts';
+import { cleanExtras, PLACED_KINDS, ROT_STEPS, type DrsMark, type Placed, type TrackExtras } from './extras.ts';
 
 /**
  * TRACK CODES — a short text form of a track that players copy and paste.
@@ -34,7 +34,9 @@ import { cleanExtras, PLACED_KINDS, ROT_STEPS, type Placed, type TrackExtras } f
  *   tag 1, placed scenery: a varint count, then per thing its kind (byte),
  *          x and y (int16, 0.5 m steps) and rotation (byte, 1/64 turns);
  *   tag 2, painted run-off: a varint count of numbers, then the paint grid's
- *          run-length code as varints (see track/extras.ts).
+ *          run-length code as varints (see track/extras.ts);
+ *   tag 3, DRS zones drawn by hand: a varint count, then per zone its start
+ *          and end points (4 × int16, 0.5 m steps).
  */
 export const CODE_PREFIX = 'IC1.';
 const VERSION = 5;
@@ -178,6 +180,12 @@ function extraBlocks(e: TrackExtras | undefined): [number, number[]][] {
     for (const v of e.paint) pushVarint(body, v);
     out.push([2, body]);
   }
+  if (e?.drs?.length) {
+    const body: number[] = [];
+    pushVarint(body, e.drs.length);
+    for (const m of e.drs) body.push(...int16Bytes(m.x / q), ...int16Bytes(m.y / q), ...int16Bytes(m.x2 / q), ...int16Bytes(m.y2 / q));
+    out.push([3, body]);
+  }
   return out;
 }
 
@@ -229,9 +237,19 @@ function readExtras(blocks: { tag: number; bytes: Uint8Array }[]): TrackExtras |
         paint.push(v);
       }
       e.paint = paint;
+    } else if (tag === 3) {
+      const count = varint();
+      if (count < 0 || count > 16) return null;
+      const drs: DrsMark[] = [];
+      for (let k = 0; k < count; k++) {
+        const [x, y, x2, y2] = [int16(), int16(), int16(), int16()];
+        if (x === null || y === null || x2 === null || y2 === null) return null;
+        drs.push({ x: x * q, y: y * q, x2: x2 * q, y2: y2 * q });
+      }
+      e.drs = drs;
     }
   }
-  return e.placed || e.paint ? e : {};
+  return e.placed || e.paint || e.drs ? e : {};
 }
 
 /** Pulls a code out of whatever was pasted: the bare code, or a link with #track=… */
@@ -335,7 +353,7 @@ function decodeBody(code: string): DecodeResult {
     }
     const e = readExtras(blocks);
     if (!e) return { ok: false, error: 'format' };
-    if (e.placed || e.paint) extras = e;
+    if (e.placed || e.paint || e.drs) extras = e;
   }
   if (i !== end) return { ok: false, error: 'format' };
   return extras ? { ok: true, name, dots, options, extras } : { ok: true, name, dots, options };

@@ -10,7 +10,9 @@ import type { Track, TrackDef } from './track.ts';
  * billboards, brake boards), bump kerbs, and run-off painted onto the paper.
  * All of it is in world metres, so it stays where it was put when the road
  * is reshaped (things the road now runs over are left out when the track is
- * built). Stored with the track and in its code (see track/code.ts).
+ * built). Stored with the track and in its code (see track/code.ts). Also
+ * the DRS zones drawn on it (each from one point on the road to another,
+ * forwards round the lap; see race/drs.ts).
  */
 
 /** Things that can be placed. The order is the one track codes store. */
@@ -25,8 +27,18 @@ export interface Placed {
   rot: number;
 }
 
+/** A DRS zone drawn in the editor: from the road nearest (x, y) forwards to the road nearest (x2, y2) (m, 0.5 m steps). */
+export interface DrsMark {
+  x: number;
+  y: number;
+  x2: number;
+  y2: number;
+}
+
 export interface TrackExtras {
   placed?: Placed[];
+  /** DRS zones drawn by hand (none: the track's own, worked out from its straights). */
+  drs?: DrsMark[];
   /** Painted run-off: the paint grid (PAINT) run-length coded, [run, kind, run, kind, ...] in rows from the top left. */
   paint?: number[];
 }
@@ -108,7 +120,7 @@ export function paintCode(g: Uint8Array): number[] | undefined {
 }
 
 /** True if there's nothing in the extras. */
-export const emptyExtras = (e: TrackExtras | undefined): boolean => !e || (!e.placed?.length && !e.paint?.length);
+export const emptyExtras = (e: TrackExtras | undefined): boolean => !e || (!e.placed?.length && !e.paint?.length && !e.drs?.length);
 
 /** A copy with placed things rounded the way codes store them (0.5 m, 1/64 turn) and no empty parts; undefined if empty. */
 export function cleanExtras(e: TrackExtras | undefined): TrackExtras | undefined {
@@ -117,6 +129,7 @@ export function cleanExtras(e: TrackExtras | undefined): TrackExtras | undefined
   const q = TRACK.quantize;
   if (e?.placed?.length) out.placed = e.placed.map((p) => ({ kind: p.kind, x: Math.round(p.x / q) * q, y: Math.round(p.y / q) * q, rot: quantizeRot(p.rot) }));
   if (e?.paint?.length) out.paint = [...e.paint];
+  if (e?.drs?.length) out.drs = e.drs.map((m) => ({ x: Math.round(m.x / q) * q, y: Math.round(m.y / q) * q, x2: Math.round(m.x2 / q) * q, y2: Math.round(m.y2 / q) * q }));
   return out;
 }
 
@@ -124,7 +137,8 @@ export function cleanExtras(e: TrackExtras | undefined): TrackExtras | undefined
 export function extrasKey(e: TrackExtras | undefined): string {
   if (emptyExtras(e)) return '';
   const placed = (e?.placed ?? []).map((p) => `${p.kind}@${p.x},${p.y},${Math.round((p.rot / (Math.PI * 2)) * ROT_STEPS)}`).join(';');
-  return `${placed}#${(e?.paint ?? []).join(',')}`;
+  const drs = (e?.drs ?? []).map((m) => `${m.x},${m.y},${m.x2},${m.y2}`).join(';');
+  return `${placed}#${(e?.paint ?? []).join(',')}${drs ? `#drs${drs}` : ''}`;
 }
 
 // ------------------------------------------------------------- footprints

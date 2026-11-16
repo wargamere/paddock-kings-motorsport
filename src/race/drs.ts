@@ -1,5 +1,6 @@
-import { AI, DRS, SETUP } from '../config/race.ts';
+import { AI, DRS, DRS_CUSTOM, DRS_REAL, SETUP } from '../config/race.ts';
 import { HANDLING } from '../config/handling.ts';
+import { roadDistance, type DrsMark } from '../track/extras.ts';
 import type { Track } from '../track/track.ts';
 import { racingLine, roadPace, speedProfile } from './racingLine.ts';
 
@@ -15,15 +16,19 @@ const zoneCache = new WeakMap<Track, DrsZone[]>();
 /** Distance from `a` forward to `b` round a lap of `L` m (0..L). */
 const ahead = (a: number, b: number, L: number) => (((b - a) % L) + L) % L;
 
+/** A zone from `from` m for `length` m, detected DRS.detect m before it. */
+function zoneAt(from: number, length: number, L: number): DrsZone {
+  const f = ((from % L) + L) % L;
+  return { from: f, to: (f + length) % L, detect: (((f - DRS.detect) % L) + L) % L };
+}
+
 /**
- * The track's DRS zones: its longest straights, taken flat out by the
- * quickest AI with a medium wing (no bend slows it), at most DRS.maxZones,
- * each of at least DRS.minLength m once trimmed to start a little after the
- * bend before and end before the braking for the next.
+ * The track's straights: runs of road where nothing ahead holds the quickest
+ * AI (medium wing) below `flat` of its top speed, joined over the line, each
+ * trimmed to start DRS.startAfter m past the bend before and end DRS.endBefore
+ * m before the braking for the next; longest first.
  */
-export function drsZones(track: Track): DrsZone[] {
-  const known = zoneCache.get(track);
-  if (known) return known;
+function straights(track: Track, flatFrac: number): { from: number; length: number }[] {
   const c = track.center;
   const L = c.length;
   const n = c.points.length;
@@ -31,14 +36,9 @@ export function drsZones(track: Track): DrsZone[] {
   const top = AI.pace[AI.pace.length - 1];
   const pace = roadPace({ grip: top[0], maxSpeed: HANDLING.maxSpeed * top[1], brake: top[2] }, track);
   const plan = speedProfile(track, line, { ...pace, downforce: SETUP.wing.medium.downforce, drag: SETUP.wing.medium.drag });
-  // (Nearly) flat out: nothing ahead holds the car much below its top speed.
-  const flat = (i: number) => plan.limit[i] >= pace.maxSpeed * DRS.flat;
-  // Runs of flat-out samples, joined over the line.
+  const flat = (i: number) => plan.limit[i] >= pace.maxSpeed * flatFrac;
   const first = Array.from({ length: n }, (_, i) => i).find((i) => !flat(i));
-  if (first === undefined) {
-    zoneCache.set(track, []);
-    return [];
-  }
+  if (first === undefined) return [];
   const runs: { from: number; length: number }[] = [];
   let start = -1;
   for (let k = 1; k <= n; k++) {
@@ -50,17 +50,72 @@ export function drsZones(track: Track): DrsZone[] {
       start = -1;
     }
   }
-  const trimmed = runs.map((r) => ({ from: r.from + DRS.startAfter, length: r.length - DRS.startAfter - DRS.endBefore })).sort((a, b) => b.length - a.length);
-  const long = trimmed.filter((r) => r.length >= DRS.minLength);
-  // (Every track has one: its longest straight, if it's long enough at all.)
-  const picked = long.length ? long : trimmed.filter((r) => r.length >= DRS.shortest).slice(0, 1);
-  const zones = picked
-    .slice(0, DRS.maxZones)
-    .map((r) => {
-      const from = ((r.from % L) + L) % L;
-      return { from, to: (from + r.length) % L, detect: (((from - DRS.detect) % L) + L) % L };
-    })
-    .sort((a, b) => a.from - b.from);
+  return runs.map((r) => ({ from: r.from + DRS.startAfter, length: r.length - DRS.startAfter - DRS.endBefore })).sort((a, b) => b.length - a.length);
+}
+
+/** Zones drawn in the editor: each from the road nearest its start forwards to the road nearest its end. */
+function drawnZones(track: Track, marks: readonly DrsMark[]): DrsZone[] {
+  const c = track.center;
+  const L = c.length;
+  const out: DrsZone[] = [];
+  for (const m of marks.slice(0, DRS_CUSTOM.max)) {
+    const a = roadDistance(track, m.x, m.y);
+    const b = roadDistance(track, m.x2, m.y2);
+    const length = ahead(c.dist[a.i], c.dist[b.i], L);
+    if (length >= DRS_CUSTOM.shortest) out.push(zoneAt(c.dist[a.i], length, L));
+  }
+  return out;
+}
+
+/**
+ * A real circuit's zones, where they are in the real world (DRS_REAL): for
+ * each, the straight nearest that point of the lap (each straight used once).
+ */
+function realZones(track: Track, at: readonly number[]): DrsZone[] {
+  const L = track.center.length;
+  const runs = straights(track, DRS_REAL.flat).filter((r) => r.length >= DRS_REAL.shortest);
+  const used = new Set<number>();
+  const out: DrsZone[] = [];
+  for (const f of at) {
+    const s = f * L;
+    // How far the point is from the straight (0 if it's on it).
+    const off = (r: { from: number; length: number }) => {
+      const into = ahead(r.from, s, L);
+      return into <= r.length ? 0 : Math.min(into - r.length, L - into);
+    };
+    let best = -1;
+    runs.forEach((r, k) => {
+      if (!used.has(k) && off(r) <= DRS_REAL.reach * L && (best < 0 || off(r) < off(runs[best]))) best = k;
+    });
+    if (best < 0) continue;
+    used.add(best);
+    out.push(zoneAt(runs[best].from, runs[best].length, L));
+  }
+  return out;
+}
+
+/**
+ * The track's DRS zones: the ones drawn on it in the editor if there are any;
+ * on a real circuit, where its real ones are (DRS_REAL); otherwise its
+ * longest straights, at most DRS.maxZones, each at least DRS.minLength m
+ * (every track gets its longest straight of at least DRS.shortest m).
+ */
+export function drsZones(track: Track): DrsZone[] {
+  const known = zoneCache.get(track);
+  if (known) return known;
+  const L = track.center.length;
+  let zones: DrsZone[] = [];
+  const marks = track.def.extras?.drs;
+  const real = DRS_REAL.zones[track.def.id];
+  if (marks?.length) zones = drawnZones(track, marks);
+  else if (real) zones = realZones(track, real);
+  if (!zones.length && !marks?.length) {
+    const trimmed = straights(track, DRS.flat);
+    const long = trimmed.filter((r) => r.length >= DRS.minLength);
+    const picked = long.length ? long : trimmed.filter((r) => r.length >= DRS.shortest).slice(0, 1);
+    zones = picked.slice(0, DRS.maxZones).map((r) => zoneAt(r.from, r.length, L));
+  }
+  zones.sort((a, b) => a.from - b.from);
   zoneCache.set(track, zones);
   return zones;
 }

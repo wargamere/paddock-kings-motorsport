@@ -6,6 +6,7 @@ import { outerAt, pitLane, pitWallAt } from '../track/pitLane.ts';
 import { edgeOffsets, leftOf, sampleAt } from '../track/spline.ts';
 import { PLACED_SPEC, placedOn, runoffLayout, type Placed, type PlacedKind } from '../track/extras.ts';
 import { tunnelsOf } from '../track/tunnels.ts';
+import type { DrsZone } from '../race/drs.ts';
 import type { Track } from '../track/track.ts';
 import { crossingKind, crossingsOf } from './validation.ts';
 
@@ -826,4 +827,56 @@ export function drawConfetti(ctx: CanvasRenderingContext2D, ps: readonly Confett
     ctx.fillRect(-p.w / 2, -p.w / 4, p.w, p.w / 2);
     ctx.restore();
   }
+}
+
+/**
+ * DRS zones (while drawing them): each a green band down the middle of its
+ * stretch of road with a bar across its start, its detection point a thin
+ * line before it, and the start of the one being drawn (centre-line sample).
+ */
+export function drawDrsZones(ctx: CanvasRenderingContext2D, v: View, track: Track, zones: readonly DrsZone[], pending: number | null): void {
+  const c = track.center;
+  const n = c.points.length;
+  const L = c.length;
+  const at = (s: number) => Math.round((((s % L) + L) % L) / c.spacing) % n;
+  const across = (i: number, colour: string, width: number) => {
+    const p = c.points[i];
+    const l = leftOf(c.tangents[i]);
+    const half = c.width / 2 + 1.5;
+    const a = toScreen(v, { x: p.x + l.x * half, y: p.y + l.y * half });
+    const b = toScreen(v, { x: p.x - l.x * half, y: p.y - l.y * half });
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  };
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const z of zones) {
+    const from = at(z.from);
+    const steps = Math.round((((z.to - z.from) % L) + L) % L / c.spacing);
+    ctx.strokeStyle = 'rgba(22, 163, 74, 0.75)';
+    ctx.lineWidth = Math.max(3, c.width * v.scale * 0.55);
+    ctx.beginPath();
+    for (let k = 0; k <= steps; k++) {
+      const q = toScreen(v, c.points[(from + k) % n]);
+      if (k) ctx.lineTo(q.x, q.y);
+      else ctx.moveTo(q.x, q.y);
+    }
+    ctx.stroke();
+    across(from, '#15803d', 3);
+    across(at(z.detect), 'rgba(21, 128, 61, 0.7)', 1.5);
+  }
+  if (pending !== null) {
+    across(pending, '#15803d', 4);
+    const q = toScreen(v, c.points[pending]);
+    ctx.fillStyle = '#15803d';
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }

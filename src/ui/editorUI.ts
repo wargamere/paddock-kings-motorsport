@@ -80,13 +80,15 @@ export interface EditorActions {
   placeTool(what: PlacedKind | null): void;
   /** Paint-run-off tool with a paint value (0 erase, 1 grass, 2 gravel, 3 tarmac; null: stop), and its brush size (m). */
   paintTool(value: number | null): void;
+  /** Draw-DRS-zones tool: on or off. */
+  drsTool(on: boolean): void;
   brushSize(m: number): void;
   /** Run-off at the picked corner or every corner (paint value; 0 = as the track). */
   cornerRunoff(which: 'picked' | 'all', value: number): void;
   /** Bump kerb at the picked corner. */
   cornerBump(on: boolean): void;
   chicaneBumps(): void;
-  clearExtras(what: 'bumps' | 'placed' | 'paint'): void;
+  clearExtras(what: 'bumps' | 'placed' | 'paint' | 'drs'): void;
   /** Turns every level crossing into a road over a road. */
   liftCrossings(): void;
 }
@@ -146,7 +148,9 @@ export interface EditorViewState {
   /** An image is being traced. */
   tracing: boolean;
   /** The hand tool in use: painting run-off (its paint value) or placing scenery. */
-  tool: { paint: number } | { place: PlacedKind } | null;
+  tool: { paint: number } | { place: PlacedKind } | { drs: true } | null;
+  /** The track's DRS zones: drawn by hand or not, and how many (null: no track yet). */
+  drs: { drawn: boolean; count: number } | null;
   brush: number;
   /** The picked numbered corner: its run-off (paint value) and whether it has a bump kerb. */
   picked: { n: number; runoff: number; bump: boolean } | null;
@@ -263,6 +267,10 @@ export class EditorUI {
     placeButtons: Map<PlacedKind, HTMLButtonElement>;
     placeDone: HTMLButtonElement;
     placedInfo: HTMLElement;
+    drsBtn: HTMLButtonElement;
+    drsAuto: HTMLButtonElement;
+    drsDone: HTMLButtonElement;
+    drsInfo: HTMLElement;
   };
   private readonly picker: HTMLDialogElement;
   private cornerSel = -1;
@@ -272,6 +280,7 @@ export class EditorUI {
   /** The hand tool in use, as last shown (so the buttons toggle it). */
   private painting = false;
   private placing: PlacedKind | null = null;
+  private drawingDrs = false;
 
   constructor(actions: EditorActions, sampleNames: readonly string[], openSection = 0) {
     const k = STR.editor.keys;
@@ -550,6 +559,10 @@ export class EditorUI {
       }),
     );
     const placeDone = button(X.done, () => actions.placeTool(null), { icon: '✓', class: 'compact primary' });
+    const drsBtn = button(X.drsDraw, () => actions.drsTool(!this.drawingDrs), { icon: '✎', class: 'compact' });
+    const drsAuto = button(X.drsAutoBtn, () => actions.clearExtras('drs'), { icon: '↺', class: 'compact' });
+    const drsDone = button(X.done, () => actions.drsTool(false), { icon: '✓', class: 'compact primary' });
+    const drsInfo = h('span', { class: 'bank-all-state' });
     const placedInfo = h('span', { class: 'bank-all-state' });
     const placeRow = h('div', { class: 'row wrap' }, placeDone, button(X.clearPlaced, () => actions.clearExtras('placed'), { icon: '×', class: 'compact' }), placedInfo);
 
@@ -600,6 +613,10 @@ export class EditorUI {
       placeButtons,
       placeDone,
       placedInfo,
+      drsBtn,
+      drsAuto,
+      drsDone,
+      drsInfo,
     };
 
     this.pointLabel = h('p', { class: 'studio-point-label', text: T.pointNone });
@@ -694,6 +711,8 @@ export class EditorUI {
           ),
           h('p', { class: 'help', text: S.startHelp }),
           h('div', { class: 'row wrap' }, button(STR.buttons.reverse, actions.reverse, { icon: '⇄', key: 'R' })),
+          field(X.drs, drsInfo, h('div', { class: 'row wrap' }, drsBtn, drsAuto, drsDone)),
+          h('p', { class: 'help', text: X.drsHelp }),
         ],
       ],
       [
@@ -1039,6 +1058,13 @@ export class EditorUI {
       b.setAttribute('aria-pressed', String(this.placing === k));
     }
     c.placeDone.hidden = !this.placing;
+    this.drawingDrs = !!s.tool && 'drs' in s.tool;
+    c.drsBtn.classList.toggle('on', this.drawingDrs);
+    c.drsBtn.setAttribute('aria-pressed', String(this.drawingDrs));
+    c.drsDone.hidden = !this.drawingDrs;
+    c.drsAuto.hidden = !s.drs?.drawn;
+    const drsText = !s.drs ? '' : s.drs.count === 0 ? X.drsNone : fmt(s.drs.drawn ? X.drsCountDrawn : X.drsCountAuto, { n: s.drs.count });
+    if (c.drsInfo.textContent !== drsText) c.drsInfo.textContent = drsText;
     const placedText = s.placedCount ? fmt(X.placedCount, { n: s.placedCount }) : '';
     if (c.placedInfo.textContent !== placedText) c.placedInfo.textContent = placedText;
     c.pickedBox.hidden = !s.picked;

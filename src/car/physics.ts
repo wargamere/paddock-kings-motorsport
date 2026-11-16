@@ -423,7 +423,7 @@ export class CarPhysics {
     if (throttle > 0) {
       const extra = H.slipstreamTopSpeed * tow + (this.drs ? DRS.top : 0) + (boost ? ERS.top : 0);
       const fade = Math.max(0, 1 - vf / (H.maxSpeed * this.tune.top * gears.top * speedF * (1 + extra)));
-      if (vf >= -0.5) drive += (H.engineAccel * this.tune.pull * accelF * pull + H.slipstreamPush * tow + (boost ? ERS.push : 0)) * throttle * fade;
+      if (vf >= -0.5) drive += (H.engineAccel * this.tune.pull * accelF * pull + H.slipstreamPush * tow + (this.drs ? DRS.push : 0) + (boost ? ERS.push : 0)) * throttle * fade;
       else resist += brakeDecel * throttle;
     }
     // The battery: the boost uses it, braking charges it.
