@@ -691,6 +691,7 @@ export class RaceScreen implements Screen {
     }
     if (!this.hud2.root.isConnected) this.game.ui.insertBefore(this.hud2.root, this.gridOverlay.root);
     this.hud2.clear();
+    this.hud2.flash(STR.race.p2Controls, 6);
     this.input2.attach();
     this.input2.onAction = (a) => this.onP2Action(a);
     this.p2Tyres = p2.ai.car.compound;
@@ -850,7 +851,7 @@ export class RaceScreen implements Screen {
     this.qSessions.push(res);
     for (const [k, t] of times) this.qBest.set(k, t);
     const entry = (k: number, out: boolean): GridEntry =>
-      k === YOU ? { name: this.myName, paint: this.myPaint, time: times.get(YOU) ?? null, you: true, out } : { name: field[k].name, paint: field[k].paint, time: times.get(k) ?? null, you: false, out, trait: this.traitTag(field[k]) };
+      k === YOU ? { name: this.myName, paint: this.myPaint, time: times.get(YOU) ?? null, you: true, out } : { name: field[k].name, paint: field[k].paint, time: times.get(k) ?? null, you: false, out };
     if (part < 3 && !res.out.includes(YOU)) {
       // Through: the classification, and on to the next session.
       this.qIn = res.through;
@@ -911,7 +912,7 @@ export class RaceScreen implements Screen {
     const entries: GridEntry[] = order.map((id) =>
       id === YOU
         ? { name: this.myName, paint: this.myPaint, time: times.get(YOU) ?? null, you: true }
-        : { name: field[id].name, paint: field[id].paint, time: times.get(id) ?? null, you: false, trait: this.traitTag(field[id]) },
+        : { name: field[id].name, paint: field[id].paint, time: times.get(id) ?? null, you: false },
     );
     // A championship keeps the grid (so the race can be run later, or again).
     const ev = this.game.event;
@@ -986,12 +987,6 @@ export class RaceScreen implements Screen {
     this.opponents = [];
     for (const m of this.aiModels) m.root.visible = false;
     for (const l of this.aiLabels) l.hidden = true;
-  }
-
-  /** An AI driver's best-known trait, for the grid ("⚔ Aggressive"; none: no trait). */
-  private traitTag(f: FieldCar): string | undefined {
-    const t = traits(personalityFor(f.id ?? f.name))[0];
-    return t ? `${STR.traits[t].icon} ${STR.traits[t].name}` : undefined;
   }
 
   /** An AI driver (car `idx`) made a mistake: near you, your engineer says so. */
@@ -1792,8 +1787,7 @@ export class RaceScreen implements Screen {
       const phys = o ? o.ai.car : car;
       return {
         pos: i + 1,
-        // (An AI driver's best-known trait, as an icon.)
-        name: o?.traits[0] ? `${e.name} ${STR.traits[o.traits[0]].icon}` : e.name,
+        name: e.name,
         paint: e.paint,
         you: e.you,
         out: e.out,

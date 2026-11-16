@@ -6,6 +6,13 @@ import { money } from '../career/owner.ts';
 import { driverDef, driverFee, FOUNDING_BUDGET } from '../career/roster.ts';
 import { createCustomCareer, type CreateTeamOptions } from '../career/teamManagement.ts';
 import { button, h, segmented, slider } from './dom.ts';
+import { STR } from '../config/strings.ts';
+import { personalityFor, traits } from '../race/personality.ts';
+
+/** A driver's character, as when signing them ("⚔ Aggressive · 🛞 Easy on tyres"; "" if nothing stands out). The same as in their races. */
+export function driverTraits(id: string): string {
+  return traits(personalityFor(id)).map((t) => `${STR.traits[t].icon} ${STR.traits[t].name}`).join(' · ');
+}
 
 export interface TeamDraft extends CreateTeamOptions { seat: 0 | 1; }
 export const freshTeamDraft = (): TeamDraft => ({ principal: '', name: 'My Racing Team', paint: 0x7657ed, secondary: 0x61e2be, drivers: ['gp-alborne', 'gp-behrman'], difficulty: 50, length: 'medium', rounds: 'standard', seat: 0 });
@@ -23,7 +30,9 @@ export function driverMarket(drivers: readonly DriverDef[], picked: readonly str
     b.setAttribute('aria-pressed', String(selected));
     b.disabled = other || (hiring && selected) || driverFee(driver.id) > cash;
     const source = GP_TEAMS.find((t) => t.drivers.includes(driver.id))?.name ?? CAREER.teams.find((t) => t.drivers.includes(driver.id))?.name ?? 'Free agent';
+    const character = driverTraits(driver.id);
     b.append(h('div', { class: 'team-market-heading' }, h('span', { class: 'team-market-code', text: driver.code }), h('b', { text: `${Math.round(driver.skill * 100)} OVR` })), h('strong', { text: `${driver.first} ${driver.name}` }), h('small', { text: source }),
+      ...(character ? [h('span', { class: 'team-market-traits', text: character })] : []),
       h('span', { class: 'team-market-fee', text: other ? 'SIGNED TO YOUR OTHER SEAT' : selected ? 'SELECTED FOR THIS SEAT' : `${money(driverFee(driver.id))} signing fee` }));
     grid.append(b);
   }

@@ -99,13 +99,24 @@ test('mistakes: rare, on the driver’s own dice (the same race twice is the sam
 test('split screen on one keyboard: player 1 has W A S D (and every other key), player 2 the arrows, Right Shift and /', () => {
   const { p1, p2 } = splitMaps(DEFAULT_BINDINGS);
   for (const [k, a] of [['KeyW', 'throttle'], ['KeyS', 'brake'], ['KeyA', 'left'], ['KeyD', 'right'], ['Space', 'boost'], ['KeyR', 'reset'], ['KeyC', 'camera'], ['Escape', 'pause']] as const) assert.equal(p1.get(k), a, k);
-  for (const k of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', P2_KEYS.boost, P2_KEYS.reset]) assert.equal(p1.has(k), false, `${k} isn't player 1's`);
-  for (const [k, a] of [['ArrowUp', 'throttle'], ['ArrowDown', 'brake'], ['ArrowLeft', 'left'], ['ArrowRight', 'right'], [P2_KEYS.boost, 'boost'], [P2_KEYS.reset, 'reset']] as const) assert.equal(p2.get(k), a, k);
+  for (const k of Object.keys(P2_KEYS)) assert.equal(p1.has(k), false, `${k} isn't player 1's`);
+  for (const [k, a] of [['ArrowUp', 'throttle'], ['ArrowDown', 'brake'], ['ArrowLeft', 'left'], ['ArrowRight', 'right'], ['Numpad8', 'throttle'], ['ShiftRight', 'boost'], ['Slash', 'reset']] as const) assert.equal(p2.get(k), a, k);
   assert.equal(p2.has('KeyW'), false);
-  // Rebound second keys go to player 2.
-  const custom = { ...DEFAULT_BINDINGS, throttle: ['KeyW', 'KeyI'], brake: ['KeyS', 'KeyK'] };
-  const m = splitMaps(custom);
-  assert.equal(m.p2.get('KeyI'), 'throttle');
-  assert.equal(m.p2.get('KeyK'), 'brake');
-  assert.equal(m.p1.has('KeyI'), false);
+  // Whatever the bindings, player 2 has the arrows: bound first, or alone, they're still player 2's,
+  // and player 1 gets W A S D for what the bindings only had on the arrows.
+  for (const custom of [
+    { ...DEFAULT_BINDINGS, throttle: ['ArrowUp', 'KeyW'], brake: ['ArrowDown', 'KeyS'], left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'] },
+    { ...DEFAULT_BINDINGS, throttle: ['ArrowUp'], brake: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'] },
+    { ...DEFAULT_BINDINGS, throttle: ['KeyI', 'ArrowUp'], brake: ['KeyK'] },
+  ]) {
+    const m = splitMaps(custom);
+    for (const [k, a] of [['ArrowUp', 'throttle'], ['ArrowDown', 'brake'], ['ArrowLeft', 'left'], ['ArrowRight', 'right']] as const) {
+      assert.equal(m.p2.get(k), a);
+      assert.equal(m.p1.has(k), false);
+    }
+    for (const a of ['throttle', 'brake', 'left', 'right'] as const) assert.ok([...m.p1.values()].includes(a), `player 1 can ${a}`);
+  }
+  const mine = splitMaps({ ...DEFAULT_BINDINGS, throttle: ['KeyI', 'ArrowUp'] });
+  assert.equal(mine.p1.get('KeyI'), 'throttle', 'player 1 keeps their own key');
+  assert.equal(mine.p1.has('KeyW'), false);
 });

@@ -11,8 +11,6 @@ export interface GridEntry {
   you: boolean;
   /** Knocked out in this session (knockout qualifying). */
   out?: boolean;
-  /** An AI driver's best-known trait ("⚔ Aggressive"). */
-  trait?: string;
 }
 
 /**
@@ -75,7 +73,6 @@ export class GridOverlay {
           h('span', { class: 'standing-pos', text: ord(i) }),
           dot,
           h('span', { class: 'standing-name', text: e.name }),
-          e.trait ? h('span', { class: 'standing-trait', text: e.trait }) : null,
           e.out ? h('span', { class: 'standing-out', text: STR.grid.outTag }) : null,
           h('span', { class: 'standing-time', text: time }),
         );

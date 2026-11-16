@@ -3,7 +3,7 @@ import { money } from '../career/owner.ts';
 import { driverDef } from '../career/roster.ts';
 import { hireDriver, marketDrivers, recruitmentOpen, updateTeamIdentity } from '../career/teamManagement.ts';
 import { button, h } from './dom.ts';
-import { liveryFields, driverMarket } from './teamCreation.ts';
+import { liveryFields, driverMarket, driverTraits } from './teamCreation.ts';
 import { cancelFutureContract, contractQuote, driverContracts, offerDriverContract, openDriverTalk, projectedDrivers } from '../career/contracts.ts';
 
 const seatFor = new WeakMap<CareerSave, 0 | 1>();
@@ -30,7 +30,8 @@ export function recruitmentView(save: CareerSave, changed: () => void): HTMLElem
   }
   const driver = h('select'); driver.setAttribute('aria-label', 'Driver to negotiate with');
   for (const d of [...marketDrivers(save)].sort((a, b) => Number(current.drivers.includes(b.id)) - Number(current.drivers.includes(a.id)) || b.skill - a.skill)) {
-    const option = h('option', { text: `${d.first} ${d.name} · ${Math.round(d.skill * 100)}${current.drivers.includes(d.id) ? ' · renew' : ''}` }); option.value = d.id; option.disabled = c.next.some(deal => deal?.driver === d.id); driver.append(option);
+    const character = driverTraits(d.id);
+    const option = h('option', { text: `${d.first} ${d.name} · ${Math.round(d.skill * 100)}${character ? ` · ${character}` : ''}${current.drivers.includes(d.id) ? ' · renew' : ''}` }); option.value = d.id; option.disabled = c.next.some(deal => deal?.driver === d.id); driver.append(option);
   }
   driver.value = Array.from(driver.options).find(o => o.value === current.drivers[seat] && !o.disabled)?.value ?? Array.from(driver.options).find(o => !o.disabled)?.value ?? '';
   const years = h('select'); years.setAttribute('aria-label', 'Contract duration'); for (const n of [1, 2, 3]) { const option = h('option', { text: `${n} season${n > 1 ? 's' : ''}` }); option.value = String(n); years.append(option); }
@@ -40,7 +41,8 @@ export function recruitmentView(save: CareerSave, changed: () => void): HTMLElem
   const talks = h('div', { class: 'contract-talks' });
   for (const t of c.talks.filter(t => t.status !== 'cancelled')) {
     const d = driverDef(t.driver)!, expired = t.expires < save.done.length && t.status !== 'accepted';
-    const card = h('article', { class: `contract-talk ${t.status}` }, h('div', { class: 'owner-label', text: `CAR ${t.seat + 1} · ${t.years} SEASON${t.years > 1 ? 'S' : ''}` }), h('h3', { text: `${d.first} ${d.name}` }));
+    const character = driverTraits(t.driver);
+    const card = h('article', { class: `contract-talk ${t.status}` }, h('div', { class: 'owner-label', text: `CAR ${t.seat + 1} · ${t.years} SEASON${t.years > 1 ? 'S' : ''}` }), h('h3', { text: `${d.first} ${d.name}` }), character ? h('p', { class: 'contract-traits', text: character }) : null);
     if (t.status === 'accepted') { card.append(h('p', { text: `Agreement signed. Joins for season ${save.season + 1}.` })); talks.append(card); continue; }
     if (expired) { const restart = button('Reopen expired talks', () => { if (openDriverTalk(save, t.driver, t.seat, t.years)) changed(); }); restart.tabIndex = 0; card.append(h('p', { text: 'The previous terms expired. Reopen talks for a new quote.' }), restart); talks.append(card); continue; }
     const prefix = `${d.name} car ${t.seat + 1}`;

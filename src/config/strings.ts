@@ -937,6 +937,7 @@ export const STR = {
     p2Finished: 'Finished {pos}!',
     p2Out: 'Broken down: out of the race',
     p2Waiting: 'Player 2 is still racing…',
+    p2Controls: 'Player 2: arrow keys to drive · Right Shift boost · / reset',
     hintSplit: 'Player 1 (top): W A S D drive, Space boost, R reset, C camera · Player 2 (bottom): arrow keys, Right Shift boost, / reset · or a gamepad each · Esc pause',
     speedUnitMph: 'mph',
     paused: 'Paused',
