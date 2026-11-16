@@ -1,7 +1,9 @@
 import { CarPhysics, NO_INPUT, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
 import { standardBrake, standardGrip } from '../car/tyres.ts';
 import { HANDLING } from '../config/handling.ts';
-import { AI, CONDITIONS, DAMAGE, DRS, ERS, FLAGS, PIT_LANE, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, DRS, ERS, FLAGS, PERSONALITY, PIT_LANE, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
+import { hashString, rng } from '../core/random.ts';
+import type { MistakeKind, Personality } from './personality.ts';
 import { clamp, wrap } from '../core/math.ts';
 import { outerAt, type PitLane } from '../track/pitLane.ts';
 import { edgeOffsets } from '../track/spline.ts';
@@ -192,6 +194,22 @@ export class AiDriver {
   /** The road its speed plan was made for: dry (0) or soaked (1). As the road gets wetter or drier it drives by the grip and brakes there are against that. */
   private readonly planWetness: number;
 
+  /** Its character (none: the plain AI, as in tests and medal laps); its dice for mistakes; the mistake it's making, if any. */
+  readonly personality: Personality | null;
+  private readonly dice: () => number;
+  private mistakeNow: { kind: MistakeKind; left: number } | null = null;
+  /** Edges for mistakes: braking, turning in and powering out on the last tick. */
+  private wasBraking = false;
+  private wasTurning = false;
+  private wasPowering = false;
+  /** Told when it makes a mistake (the race screen: your engineer, the replay). */
+  onMistake: ((kind: MistakeKind) => void) | null = null;
+
+  /** The mistake it's making now (a lock-up smokes its front tyres). */
+  get mistake(): MistakeKind | null {
+    return this.mistakeNow?.kind ?? null;
+  }
+
   /** It has the overtake boost (a race with DRS and the boost): it uses it to pass and to defend. */
   private readonly ers: boolean;
   /** The two-compound rule is in force: it races on two dry compounds (or runs wets), stopping for it if it must. */
@@ -208,7 +226,7 @@ export class AiDriver {
    * `slot`: its place on the grid; `box`: whose pit box it uses (see pitBox:
    * 0 is yours; by default slot + 1).
    */
-  constructor(track: Track, opts: { name: string; paint: number; difficulty: number; laps: number; slot: number; box?: number; wet?: boolean; tyreWear?: boolean; damage?: boolean; mediumLife?: number; tune?: Readonly<CarPerformance>; twoCompounds?: boolean; ers?: boolean }) {
+  constructor(track: Track, opts: { name: string; paint: number; difficulty: number; laps: number; slot: number; box?: number; wet?: boolean; tyreWear?: boolean; damage?: boolean; mediumLife?: number; tune?: Readonly<CarPerformance>; twoCompounds?: boolean; ers?: boolean; personality?: Personality }) {
     const wet = !!opts.wet;
     this.name = opts.name;
     this.paint = opts.paint;
@@ -235,6 +253,10 @@ export class AiDriver {
     this.preference = preferredCompound(opts.slot);
     this.twoCompounds = !!opts.twoCompounds && !!opts.tyreWear;
     this.ers = !!opts.ers;
+    // Its character: how it races, and (rarely) a mistake, from its own seeded dice.
+    this.personality = opts.personality ?? null;
+    if (this.personality) this.car.wearRate = 1 - this.personality.tyres * PERSONALITY.tyreWear;
+    this.dice = rng(hashString(`mistakes:${opts.name}:${opts.slot}`));
     if (opts.tyreWear) {
       // (How long the tyres last: the track's own figure, unless the race says otherwise.)
       this.car.mediumLife = opts.mediumLife ?? trackTyreLife(track);
@@ -530,6 +552,15 @@ export class AiDriver {
     if (this.planner.crowded) pace *= 1 - TRAFFIC.crowdEase;
     // Yellow flags: ease off.
     if (this.yellow) pace *= FLAGS.yellowPace;
+    // Its character: quicker or slower in the wet; pushing to catch a car, or to keep one behind.
+    const near = this.nearest(st, cars);
+    const p = this.personality;
+    if (p && !finished) {
+      const P = PERSONALITY;
+      pace *= 1 + p.rain * P.rainPace * this.car.wetness;
+      if (p.style > 0 && near.ahead < ERS.attack) pace *= 1 + p.style * P.pushPace;
+      if (p.style < 0 && near.behind < ERS.defend) pace *= 1 - p.style * P.defendPace;
+    }
     // Stuck behind a slower car that isn't an AI (you): a push to get by, like a tow (see
     // TrafficPlanner.pushing).
     if (this.planner.pushing) this.car.draft = Math.max(this.car.draft, TRAFFIC.pushTow);
@@ -543,7 +574,7 @@ export class AiDriver {
       this.lane = st.lateral - this.driver.lateralAt(st.s);
       this.laneVel = 0;
     }
-    const inp = this.driver.drive(st, this.lane, this.inp, { pace, cap, tow: this.car.draft, keep, late: this.planner.fighting, route, offRoad: !!pit?.offRoad, grip: (this.car.gripScale * this.car.damageGrip) / standardGrip(this.planWetness), brake: this.car.brakeScale / standardBrake(this.planWetness), extraTop: (this.car.drs ? DRS.top : 0) + (this.car.boosting ? ERS.top : 0) });
+    const inp = this.driver.drive(st, this.lane, this.inp, { pace, cap, tow: this.car.draft, keep, late: this.planner.fighting || (!!p && p.style >= PERSONALITY.traitFrom && near.ahead < PERSONALITY.lateWithin), route, offRoad: !!pit?.offRoad, grip: (this.car.gripScale * this.car.damageGrip) / standardGrip(this.planWetness), brake: this.car.brakeScale / standardBrake(this.planWetness), extraTop: (this.car.drs ? DRS.top : 0) + (this.car.boosting ? ERS.top : 0) });
     // Sliding (knocked, or ran wide): easing off the throttle until it gathers itself. No braking,
     // which would only surprise the car behind. (Being off its path is already taken care of:
     // the speed then comes from the path it's really on.)
@@ -568,7 +599,9 @@ export class AiDriver {
     }
 
     // The overtake boost: to pass, or to keep a car behind.
-    inp.boost = this.ers && !finished && !pit && !this.yellow && !Number.isFinite(this.raceCap) && this.recover <= 0 && this.wantsBoost(st, cars, inp);
+    inp.boost = this.ers && !finished && !pit && !this.yellow && !Number.isFinite(this.raceCap) && this.recover <= 0 && this.wantsBoost(near, inp, st);
+    // A mistake: started on the edge of braking, turning in or powering out, then played out.
+    if (p) this.mistakes(st, inp, near.behind, finished || !!pit, dt);
 
     // Stuck against something (or spun into the grass): back onto the road, once nobody is
     // coming up behind (it would be put right in front of them).
@@ -589,8 +622,19 @@ export class AiDriver {
    * ERS.attack m ahead, or a car within ERS.defend m behind, keeping
    * ERS.reserve of the battery back (half of it defending) until the last lap.
    */
-  private wantsBoost(st: CarState, cars: readonly CarState[], inp: DriveInput): boolean {
+  private wantsBoost(near: { ahead: number; behind: number }, inp: DriveInput, st: CarState): boolean {
     if (inp.throttle < 0.95 || inp.brake > 0 || Math.abs(inp.steer) > 0.25 || st.inPits) return false;
+    const s = this.session;
+    // (Aggressive: from further back, keeping less in hand; defensive: defending from further.)
+    const style = this.personality?.style ?? 0;
+    const attack = ERS.attack * (1 + Math.max(0, style) * PERSONALITY.attackRange);
+    const defend = ERS.defend * (1 + Math.max(0, -style) * PERSONALITY.defendRange);
+    const reserve = s.laps.length >= s.lapsToRun - 1 ? 0 : ERS.reserve * (1 - Math.max(0, style) / 2);
+    return (near.ahead < attack && this.car.ers > reserve) || (near.behind < defend && this.car.ers > reserve / 2);
+  }
+
+  /** The nearest car ahead and behind along the track (m; Infinity: none). */
+  private nearest(st: CarState, cars: readonly CarState[]): { ahead: number; behind: number } {
     const L = this.length;
     let ahead = Infinity;
     let behind = Infinity;
@@ -600,8 +644,50 @@ export class AiDriver {
       if (ds > 0) ahead = Math.min(ahead, ds);
       else behind = Math.min(behind, -ds);
     }
+    return { ahead, behind };
+  }
+
+  /**
+   * Mistakes (see PERSONALITY): a chance, on its own dice, each time it starts
+   * braking hard (a lock-up), turns into a bend (running wide) or powers out
+   * of one (a spin). Only racing, out of the pit lane, without a flag, after
+   * the start. The mistake then changes its input until it's over.
+   */
+  private mistakes(st: CarState, inp: DriveInput, behind: number, off: boolean, dt: number): void {
+    const P = PERSONALITY, M = P.mistake, p = this.personality!;
+    const now = this.mistakeNow;
+    if (now) {
+      now.left -= dt;
+      if (now.kind === 'lockup') inp.brake = Math.min(inp.brake, P.lockup.brake);
+      else if (now.kind === 'wide') inp.steer *= P.wide.steer;
+      else inp.throttle = 0;
+      if (now.left <= 0) this.mistakeNow = null;
+    }
+    const braking = inp.brake >= 0.6 && st.speed > 25;
+    const turning = Math.abs(inp.steer) > 0.35 && st.speed > 15;
+    const powering = inp.throttle > 0.9 && Math.abs(inp.steer) > 0.3 && st.speed > 15;
+    const edge = { lockup: braking && !this.wasBraking, wide: turning && !this.wasTurning, spin: powering && !this.wasPowering };
+    this.wasBraking = braking;
+    this.wasTurning = turning;
+    this.wasPowering = powering;
     const s = this.session;
-    const reserve = s.laps.length >= s.lapsToRun - 1 ? 0 : ERS.reserve;
-    return (ahead < ERS.attack && this.car.ers > reserve) || (behind < ERS.defend && this.car.ers > reserve / 2);
+    if (now || off || this.yellow || Number.isFinite(this.raceCap) || s.phase !== 'racing' || s.raceDistance(st.s) < M.startAfter || st.inPits) return;
+    if (!edge.lockup && !edge.wide && !edge.spin) return;
+    const car = this.car;
+    let chance = M.base * (1.5 - p.consistency);
+    if (behind < M.pressureRange) chance *= M.pressure;
+    if (car.wear && car.tyreLeft < M.wornBelow) chance *= M.worn;
+    chance *= 1 + (M.wet - 1) * car.wetness;
+    if (car.damageOn) chance *= 1 + M.damage * car.damage;
+    chance *= 1 + M.aggressive * Math.max(0, p.style);
+    for (const kind of ['lockup', 'wide', 'spin'] as const) {
+      if (!edge[kind]) continue;
+      const roll = this.dice();
+      if (roll >= chance * (kind === 'spin' ? M.spinShare : 1)) continue;
+      this.mistakeNow = { kind, left: kind === 'lockup' ? P.lockup.time : kind === 'wide' ? P.wide.time : P.spin.cut };
+      if (kind === 'spin') st.yawRate += Math.sign(inp.steer || 1) * P.spin.yaw;
+      this.onMistake?.(kind);
+      return;
+    }
   }
 }

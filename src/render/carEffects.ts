@@ -24,7 +24,7 @@ const jitter = (n: number) => (Math.random() * 2 - 1) * n;
  * hard. `view` is where it's drawn, `hit` its hardest hit since the last
  * frame (m/s), `paint` its colour. Also shows its damage on the model.
  */
-export function carEffects(fx: RaceEffects, view: CarState, car: CarPhysics, model: CarModel, paint: number, hit: number, dt: number): void {
+export function carEffects(fx: RaceEffects, view: CarState, car: CarPhysics, model: CarModel, paint: number, hit: number, dt: number, lockup = false): void {
   const D = DAMAGE_LOOK;
   const h = view.heading;
   const fx_ = Math.cos(h);
@@ -64,6 +64,15 @@ export function carEffects(fx: RaceEffects, view: CarState, car: CarPhysics, mod
     for (let i = 0; i < n; i++) {
       const [x, y, z] = at((i % 2 ? 1 : -1) * 0.86, 0.25, -1.3);
       fx.smoke.emit(x, y, z, vx * 0.7 + jitter(0.6), 0.4 + Math.random() * 0.5, vz * 0.7 + jitter(0.6), 0.9 + Math.random() * 0.5, 0.5, 2.6, 0.4, TYRE_SMOKE);
+    }
+  }
+
+  // A lock-up: smoke from the front tyres.
+  if (lockup && speed > 5) {
+    const n = count(45, dt);
+    for (let i = 0; i < n; i++) {
+      const [x, y, z] = at((i % 2 ? 1 : -1) * 0.86, 0.25, 1.3);
+      fx.smoke.emit(x, y, z, vx * 0.8 + jitter(0.5), 0.3 + Math.random() * 0.4, vz * 0.8 + jitter(0.5), 0.8 + Math.random() * 0.4, 0.4, 2.2, 0.5, TYRE_SMOKE);
     }
   }
 

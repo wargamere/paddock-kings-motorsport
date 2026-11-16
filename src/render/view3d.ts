@@ -573,10 +573,49 @@ export class View3D {
     const now = performance.now() / 1000;
     const dt = this.lastRender ? Math.min(0.1, Math.max(0, now - this.lastRender)) : 1 / 60;
     this.lastRender = now;
+    // (Back from split screen: the whole picture again.)
+    if (this.split) {
+      this.split = false;
+      const size = this.renderer.getSize(this.splitSize);
+      this.camera.aspect = size.x / Math.max(1, size.y);
+      this.camera.updateProjectionMatrix();
+    }
     this.sky.position.copy(this.camera.position);
     this.stars.position.copy(this.camera.position);
     this.rain.update(this.camera.position, dt);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private split = false;
+  private readonly splitSize = new Vector2();
+
+  /** Split screen: the main camera's view on the top half, `bottom`'s on the bottom half. */
+  renderSplit(bottom: PerspectiveCamera): void {
+    const now = performance.now() / 1000;
+    const dt = this.lastRender ? Math.min(0.1, Math.max(0, now - this.lastRender)) : 1 / 60;
+    this.lastRender = now;
+    this.split = true;
+    const r = this.renderer;
+    const { x: w, y: h } = r.getSize(this.splitSize);
+    const top = Math.floor(h / 2);
+    // (The viewport counts from the bottom of the canvas.)
+    const views: [PerspectiveCamera, number, number, number][] = [
+      [this.camera, h - top, top, dt],
+      [bottom, 0, h - top, 0],
+    ];
+    r.setScissorTest(true);
+    for (const [cam, y, height, d] of views) {
+      cam.aspect = w / Math.max(1, height);
+      cam.updateProjectionMatrix();
+      r.setViewport(0, y, w, height);
+      r.setScissor(0, y, w, height);
+      this.sky.position.copy(cam.position);
+      this.stars.position.copy(cam.position);
+      this.rain.update(cam.position, d);
+      r.render(this.scene, cam);
+    }
+    r.setScissorTest(false);
+    r.setViewport(0, 0, w, h);
   }
 
   /**

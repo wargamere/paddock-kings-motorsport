@@ -90,6 +90,35 @@ export function actionMap(b: KeyBindings): Map<string, DriveAction> {
   return m;
 }
 
+/** Driving keys split between two players on one keyboard: player 1 has the first key of each, player 2 the second. */
+const SPLIT_ACTIONS = ['throttle', 'brake', 'left', 'right'] as const;
+
+/** Player 2's keys that aren't bindings: the boost and putting the car back on the road. */
+export const P2_KEYS = { boost: 'ShiftRight', reset: 'Slash' } as const;
+
+/** The arrow keys: player 2's driving keys when they aren't bound to anything. */
+const P2_DEFAULT: Record<(typeof SPLIT_ACTIONS)[number], string> = { throttle: 'ArrowUp', brake: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+
+/**
+ * Split screen on one keyboard: player 1's keys (every binding but the second
+ * key of drive, brake and steer) and player 2's (those second keys, else the
+ * arrows; Right Shift for the boost, / to reset).
+ */
+export function splitMaps(b: KeyBindings): { p1: Map<string, DriveAction>; p2: Map<string, DriveAction> } {
+  const p1 = actionMap(b);
+  const p2 = new Map<string, DriveAction>();
+  for (const a of SPLIT_ACTIONS) {
+    const k = b[a][1] ?? (p1.has(P2_DEFAULT[a]) && !b[a].includes(P2_DEFAULT[a]) ? undefined : P2_DEFAULT[a]);
+    if (!k) continue;
+    p2.set(k, a);
+    p1.delete(k);
+  }
+  p2.set(P2_KEYS.boost, 'boost');
+  p2.set(P2_KEYS.reset, 'reset');
+  for (const k of [P2_KEYS.boost, P2_KEYS.reset]) if (!b.boost.includes(k) && !b.reset.includes(k)) p1.delete(k);
+  return { p1, p2 };
+}
+
 const NAMES: Record<string, string> = {
   ArrowUp: '↑',
   ArrowDown: '↓',
