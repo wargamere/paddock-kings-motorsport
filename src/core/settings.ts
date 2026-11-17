@@ -2,7 +2,7 @@ import { cleanBindings, DEFAULT_BINDINGS, type KeyBindings } from '../car/bindin
 import type { PaintId } from '../config/paint.ts';
 import { DEFAULT_SETUP, SETUP, type CarSetup } from '../config/race.ts';
 import type { RaceSetup } from './screen.ts';
-import { loadJSON, saveJSON } from '../platform/storage.ts';
+import { loadJSON, saveJSON, storageReady } from '../platform/storage.ts';
 
 /** Driving assists (see race/assists.ts). */
 export interface Assists {
@@ -33,8 +33,12 @@ export interface Settings {
   adPaints: PaintId[];
   /** Finished runs (paints unlock as this grows). */
   runs: number;
+  /** Has played before (a new player's first visit goes straight into a race). */
+  played: boolean;
   /** Display: graphics quality, speed units, minimap in the race, corner numbers in the editor. */
   graphics: 'full' | 'fast';
+  /** You've chosen the graphics yourself (else the game drops to Fast by itself if a race runs slowly). */
+  graphicsChosen: boolean;
   units: 'kmh' | 'mph';
   minimap: boolean;
   cornerLabels: boolean;
@@ -63,7 +67,9 @@ const DEFAULTS: Settings = {
   paint: 'yellow',
   adPaints: [],
   runs: 0,
+  played: false,
   graphics: 'full',
+  graphicsChosen: false,
   units: 'kmh',
   minimap: true,
   cornerLabels: true,
@@ -90,7 +96,11 @@ function cleanSetup(saved: unknown): CarSetup {
 export function settings(): Settings {
   if (!current) {
     const saved = loadJSON<Partial<Settings>>(KEY, {});
-    current = { ...DEFAULTS, ...saved, assists: { ...DEFAULT_ASSISTS, ...saved.assists }, keys: cleanBindings(saved.keys), carSetup: cleanSetup(saved.carSetup) };
+    const read: Settings = { ...DEFAULTS, ...saved, assists: { ...DEFAULT_ASSISTS, ...saved.assists }, keys: cleanBindings(saved.keys), carSetup: cleanSetup(saved.carSetup) };
+    // (Read before the saved data is ready, e.g. on CrazyGames before the SDK has started:
+    // used, but not kept, so the real saved settings are read once they're there.)
+    if (!storageReady()) return read;
+    current = read;
   }
   return current;
 }

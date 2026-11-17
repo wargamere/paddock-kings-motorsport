@@ -51,6 +51,11 @@ export const STR = {
     practiceHint: 'Free laps: no countdown, no pressure.',
     race: 'Race this track',
     raceHint: 'Practice or race, laps, ghost and AI cars.',
+    /** Under Race this track: what you'll race (it starts right away; Race settings changes it). */
+    raceNow: '{laps} laps against {n} AI cars',
+    raceNowAlone: '{laps} laps, just you',
+    practiceNow: 'Practice: free laps',
+    settings: 'Race settings',
     draw: 'Draw a track',
     myTracks: 'Track library',
     trackInfo: '{len} km · made to race',
@@ -58,7 +63,7 @@ export const STR = {
     noBest: 'No lap yet',
     prev: 'Previous track',
     next: 'Next track',
-    keys: 'Enter race this track · K career · E draw · L track library · ← → change track · ↑ ↓ change list',
+    keys: 'Enter race · S race settings · K career · E draw · L track library · ← → change track · ↑ ↓ change list',
     career: 'Career',
     careerHint: 'Own a team. Develop both cars. Choose your driver each race.',
     /** Under the Career button when one is under way. */
@@ -984,6 +989,9 @@ export const STR = {
     },
     hintGamepad: 'RT drive · LT brake & reverse · stick steer · Back reset · Y camera · Start pause',
     hintTouch: 'Hold ◀ ▶ to steer, GAS and BRAKE on the right. Hold BRAKE to reverse.',
+    coachTitle: 'How to drive',
+    graphicsLowered: 'Graphics set to Fast for smoother racing (change it in the menu)',
+    coach: { throttle: 'Accelerate', steer: 'Steer', brake: 'Brake & reverse', boost: 'Boost (overtake)', pause: 'Pause & menu' },
     /** In a race with DRS and the boost: added to the gamepad and touch hints. */
     hintBoostGamepad: ' · B boost',
     hintBoostTouch: ' Hold BOOST for a burst of power.',

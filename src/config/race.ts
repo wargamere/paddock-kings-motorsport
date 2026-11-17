@@ -1,9 +1,15 @@
 /** Time-trial rules. */
+/** Graphics on a slow computer: Full drops to Fast if the first checkSeconds of racing average under minFps. */
+export const GRAPHICS = { checkSeconds: 6, minFps: 28 } as const;
+
 export const RACE = {
   /** Valid laps per run before the results screen. */
   laps: 3,
   /** 3-2-1 countdown length (seconds), then GO. */
   countdown: 3,
+  /** A new player's how-to-drive card goes after this long racing (s), or once they've driven this far (m). */
+  coachSeconds: 15,
+  coachDistance: 350,
   /** Checkpoints at every 1/count of the lap; the last one is the finish line. */
   checkpoints: 10,
   /**

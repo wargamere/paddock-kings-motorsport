@@ -18,6 +18,7 @@ try {
   assert.ok(ready, 'performance server starts');
   browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || undefined, args: ['--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor:Number(process.env.RACE_PERF_DPR || 1) });
+  await page.addInitScript(() => { if (!localStorage.getItem('inkcircuit.settings')) localStorage.setItem('inkcircuit.settings', JSON.stringify({ played: true, graphicsChosen: true })); });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto(`${origin}/?autopilot`);
   await page.waitForFunction(() => window.__game);

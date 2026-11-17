@@ -10,6 +10,7 @@ try {
   for(let i=0;i<100;i++){try{if((await fetch('http://127.0.0.1:5270')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
   browser=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined,args:['--enable-unsafe-swiftshader']});
   const page=await browser.newPage({viewport:{width:1440,height:900},deviceScaleFactor:Number(process.env.RACE_PERF_DPR||1)});
+  await page.addInitScript(() => { if (!localStorage.getItem('inkcircuit.settings')) localStorage.setItem('inkcircuit.settings', JSON.stringify({ played: true, graphicsChosen: true })); });
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:5270/?autopilot');await page.waitForFunction(()=>window.__game);
   await page.evaluate(async()=>{

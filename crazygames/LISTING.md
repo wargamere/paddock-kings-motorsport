@@ -25,18 +25,20 @@ Each command builds the game as **one self-contained `index.html`**: the game's 
 >
 > **Features**
 > - A draw-and-race track editor: freehand or dots, hills, banking, bridges or tunnels, run-off, barriers, scenery and weather-proof roads (tarmac, dirt or snow)
-> - A career: a full championship of 20 cars and 10 teams, season after season, with qualifying, points for the top ten, drivers' and constructors' titles, and offers from better teams as you win
+> - A career as a team owner: hire staff, develop the car and both drivers, take team decisions, face the press after big races and build a rivalry with the team that's closest to you, season after season. Knockout qualifying, sprint races and the real points system
 > - Race up to 11 AI cars that take racing lines, slipstream and battle wheel to wheel
 > - Races of 1 to 50 laps, with tyre wear and pit stops through a real pit lane with a 60 km/h limiter
+> - DRS zones and an overtake boost, a race engineer on the radio, AI drivers with their own personalities and mistakes
+> - Two players on one keyboard, split screen
 > - Damage (wreck the car and you're out of the race), yellow flags and a safety car that bunches the field up
-> - Rain, changing weather and night races
+> - Rain, changing weather (from drizzle to heavy rain, with intermediate and wet tyres) and night races
 > - Car setup: wing, gears and brake balance
 > - A live timing tower, a ghost of your best lap, and medals for every track
 > - Share any track with a short code
 
 **Controls:**
 
-> **Driving:** W / ↑ accelerate · S / ↓ brake and reverse · A D / ← → steer · E / Q shift up / down (manual gears) · R back onto the track · C camera · T timing tower · 1–4 choose tyres in the pits · Esc pause · M sound. Every key can be changed under Controls. Gamepads work too, and phones and tablets get on-screen controls.
+> **Driving:** W / ↑ accelerate · S / ↓ brake and reverse · A D / ← → steer · E / Q shift up / down (manual gears) · R back onto the track · C camera · T timing tower · 1–5 choose tyres in the pits · P pause (or Esc) · M sound. Every key can be changed under Controls. Gamepads work too, and phones and tablets get on-screen controls.
 >
 > **Editor:** drag to draw a loop, or click to place dots · drag dots to reshape · scroll or pinch to zoom · Z undo · Y redo · V 3D view · Enter race your track.
 
@@ -50,7 +52,7 @@ Each command builds the game as **one self-contained `index.html`**: the game's 
 | Devices | Desktop and mobile (touch controls on phones and tablets) |
 | Orientation | **Landscape** (CrazyGames asks mobile players to rotate; the game has no lock of its own) |
 | Multiplayer | No |
-| Progress save | **Yes, using the Data Module.** Logged-in players' saves also go to our own cloud (Supabase) under their CrazyGames account. |
+| Progress save | **Yes, using the Data Module.** That's the only place saves go: the CrazyGames build talks to no server of its own. |
 | Account integration | CrazyGames accounts only: the username labels your ghost car, and saves follow the account. No other login. |
 | In-game purchases | No |
 | Ads | Basic Launch: none. Full Launch: midgame ads at natural breaks ("Race again" on the results screen) and an optional rewarded ad to unlock a paint colour early (paints also unlock by playing). |
@@ -70,6 +72,8 @@ Each command builds the game as **one self-contained `index.html`**: the game's 
 
 The covers show real in-game footage plus the title only: no other text, icons, store logos or borders, as the cover rules ask. The videos are real gameplay with no mouse cursor, no black bars and no logo screens. They show a track drawn in the editor, then raced against AI cars, then raced at night in the rain. They are rendered frame by frame on a fake clock, so they're smooth. To remake the covers or videos (for example after a name change), see [`tools/README.md`](tools/README.md).
 
+**Alternative covers:** `covers/alt/cover-sunset-*.jpg` (the same three sizes): a sunset pack of cars into a corner. **Re-rendering covers and videos** from the game: `PW_CHROMIUM=<chromium> node scripts/crazygamesAssets.mjs <outDir> [covers|videos|all]` (needs ffmpeg for the videos). It steps the game a frame at a time, so the footage is smooth on any machine.
+
 ## 5. Requirements checklist
 
 | Requirement (CrazyGames docs) | Status |
@@ -87,14 +91,23 @@ The covers show real in-game footage plus the title only: no other text, icons, 
 | No links to other sites | ✅ the CrazyGames build shows no URLs or links |
 | Saves within the Data Module's 1 MB | ✅ ghosts are capped at 450 KB in total |
 | Unique, clear name | ✅ "Track Builder 3D": no game with exactly that name found (similar names exist, e.g. "Race Track Builder") |
+| New players land in gameplay immediately (at most 1 click) | ✅ a first visit goes straight into a 3-lap race with a "How to drive" card (key caps, or touch hints); later visits open the menu, where **Race this track** starts a race in one click |
+| Restricted keys: Esc leaves fullscreen | ✅ pause is **P** (shown in every hint); Esc also pauses, but the game never relies on it |
+| Smooth on low-end devices (4 GB Chromebooks) | ✅ if the first seconds of a race run under 28 fps, graphics drop to Fast by themselves (unless you've chosen) |
+| No calls to servers of our own | ✅ the CrazyGames build only talks to the CrazyGames SDK |
+| Settings and progress kept between visits | ✅ fixed: settings used to be read before the SDK had loaded the save, so they reset every visit |
 
-## 6. Steps
+## 6. Resubmitting (after a rejection)
+
+CrazyGames only looks at a resubmission with clear improvements. Paste this into the notes:
+
+> Changes since the last submission: new players now land straight in a race (no menus), with an on-screen "How to drive" card; from the menu a race is one click away. Pause moved to P (Esc leaves fullscreen). Graphics drop to Fast by themselves on slow devices. Settings and progress now persist between visits through the Data Module (a bug reset them), and the build no longer contacts any server of ours. The menu fits the smallest iframe sizes. New since then: a team-owner career with press conferences and rivalries, DRS and an overtake boost, a race engineer, AI personalities, intermediate tyres and changing rain, and two-player split screen.
+
+## 7. Steps
 
 1. **Sign up** at developer.crazygames.com and finish onboarding. You can choose "hold payments" for now.
-2. **Supabase:** follow [`../supabase/README.md`](../supabase/README.md) (the project's URL and publishable key are already in `.env`), then run `npm run package:cg`.
-3. **Submit a game:** upload `dist/crazygames/index.html`, then fill in the text and answers above.
-4. **Preview / QA tool** (in the portal): play a race to the end, try "Race again", pause and resume, open the editor, draw and race a track, mute from the CrazyGames bar, and try on a phone in landscape.
-5. **Upload** the three covers and the two videos, then **submit for Basic Launch**.
-6. **When invited to Full Launch:**
-   - Set the Supabase function secret to the game's id: `supabase secrets set CG_GAME_ID=<id>`.
+2. **Submit a game:** upload `dist/crazygames/index.html`, then fill in the text and answers above.
+3. **Preview / QA tool** (in the portal): play a race to the end, try "Race again", pause and resume, open the editor, draw and race a track, mute from the CrazyGames bar, and try on a phone in landscape.
+4. **Upload** the three covers and the two videos, then **submit for Basic Launch**.
+5. **When invited to Full Launch:**
    - Run `npm run package:cg:ads` and upload the new `dist/crazygames/index.html` as the new version.

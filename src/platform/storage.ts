@@ -187,6 +187,13 @@ class CrazyGamesStore implements KeyValueStore {
 
 const crazyStore = new CrazyGamesStore();
 
+/** Whether saved data can be read yet: on CrazyGames only once the SDK has started (or given up). */
+let ready = PLATFORM !== 'crazygames';
+export const storageReady = (): boolean => ready;
+export function markStorageReady(): void {
+  ready = true;
+}
+
 /** The game's store for this platform. */
 export const storage: KeyValueStore & { keys(): string[]; seedKeys(keys: readonly string[]): void } = new SafeStore(PLATFORM === 'crazygames' ? () => crazyStore : () => local);
 

@@ -56,7 +56,6 @@ const surface = new Surface2D(canvas2d);
 let view3d: View3D | null = null;
 try {
   view3d = new View3D(canvas3d);
-  view3d.setQuality(settings().graphics);
 } catch (err) {
   console.error('WebGL unavailable', err);
 }
@@ -75,6 +74,7 @@ class Game implements GameContext {
   lastReplay: Replay | null = null;
   replayBack: ScreenId = 'results';
   interrupted = false;
+  coach = false;
   preview: GameContext['preview'] = null;
   /** The single race's setup (the race setup menu's choices). */
   private readonly ownSetup: RaceSetup;
@@ -232,6 +232,9 @@ function legacySaveKeys(): string[] {
 }
 
 /** Web build: a share link (#track=…) boots straight into that track. */
+/** A new player's first race: three laps on the boot track against three AI cars, from the back. */
+const FIRST_RACE: Partial<RaceSetup> = { mode: 'race', ghost: false, opponents: 3, difficulty: 35, grid: 'pick', startSlot: 4, weather: 'dry', time: 'track', tyreWear: false, damage: false, safetyCar: false };
+
 function bootTrack(): Track {
   const code = CAPS.links ? readHashCode() : null;
   if (code) {
@@ -253,6 +256,9 @@ async function boot(): Promise<void> {
   platform.loadingStart();
   // A newer save from the cloud (another device, a cleared browser) before anything reads storage.
   await platform.startCloud(legacySaveKeys());
+  // (Only now: on CrazyGames saved settings come from the SDK, ready once it has started.
+  // Reading them any earlier would remember the defaults for the whole session.)
+  view3d?.setQuality(settings().graphics);
 
   audio.installUnlock();
   audio.setPlatformMuted(platform.platformMuted());
@@ -269,7 +275,14 @@ async function boot(): Promise<void> {
       game.interrupted = false;
     },
   });
-  game.go('menu');
+  // A new player (nothing played yet, no track link) goes straight into a short race, with
+  // how to drive on screen; everyone else starts at the menu (one click from a race).
+  const s = settings();
+  if (!s.played && s.runs === 0 && !(CAPS.links && readHashCode())) {
+    game.coach = true;
+    game.start(FIRST_RACE);
+  } else game.go('menu');
+  updateSettings({ played: true });
 
   if (CAPS.orientationPrompt) {
     const prompt = h('div', { class: 'rotate-prompt' }, h('div', { class: 'rotate-icon', text: '📱' }), h('p', { text: STR.rotate }));

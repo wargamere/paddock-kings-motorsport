@@ -810,7 +810,7 @@ export class EditorScreen implements Screen {
   }
 
   private setDisplay(d: Partial<DisplaySettings>): void {
-    updateSettings(d);
+    updateSettings(d.graphics ? { ...d, graphicsChosen: true } : d);
     if (d.graphics) this.game.view3d?.setQuality(d.graphics);
   }
 

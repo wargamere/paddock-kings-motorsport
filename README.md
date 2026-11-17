@@ -271,10 +271,10 @@ Freehand pipeline: raw stroke → lazy pen → merge points closer than 2 m → 
 
 ### Menu, race setup and practice
 
-The game boots to the **main menu**, with the current track turning slowly in 3D behind it. From there:
+**A new player** (nothing saved, no track link) goes straight into a race: three laps of Sunday Loop against three AI cars, from the back, with a **How to drive** card on screen (your keys as key caps, or the touch controls in words). It goes once you've driven 350 m or after 15 s of racing. Every later visit boots to the **main menu**, with the current track turning slowly in 3D behind it. From there:
 - pick a list (tabs, or ↑ ↓): **Tracks** (the game's own 23), **Real circuits** (30) or **My tracks** (yours; greyed out until you've saved one);
 - pick a track in it with ‹ › (or ← →); "4 / 30" shows where you are, and a real circuit shows its country;
-- **Race this track** (Enter) opens the race setup (below);
+- **Race this track** (Enter) starts a race right away, as you last set it up ("3 laps against 3 AI cars" underneath); **Race settings** (S) opens the race setup (below);
 - **Draw a track** (E), the **Track library** (L), and sound / graphics / units toggles.
 
 The **Track library** (`ui/libraryScreen.ts`) has the same three lists as tabs (yours first if you have any), with thumbnails, length and your best for each, plus Race, Edit and Share (and Delete for yours), and a box to paste a friend's track code.
@@ -730,7 +730,7 @@ Legacy careers keep their original ten-team grid and saved results. Their owner 
 ### Cloud saves (Supabase)
 
 Progress is also kept in Supabase so it survives a cleared browser and follows the player (`src/platform/cloud.ts`, `supabase/`):
-- **CrazyGames:** by the player's CrazyGames account (logged-in players). The `cg-save` function checks their CrazyGames token.
+- **CrazyGames:** off. The SDK's data module already keeps a logged-in player's progress with their account, and the build talks to no server of its own. (The `cg-save` function, which checks a CrazyGames token, is still there if it's ever turned back on.)
 - **Web:** an anonymous sign-in per browser.
 
 A newer cloud save is taken at start-up, before the game reads anything (waiting at most 4 s), and changes go up 5 s later and when the page is hidden. Without a project set up or a network, nothing changes for the player. Set-up steps: [`supabase/README.md`](supabase/README.md).
@@ -739,7 +739,10 @@ A newer cloud save is taken at start-up, before the game reads anything (waiting
 
 The code follows https://docs.crazygames.com/sdk/intro/. It lives in `src/platform/crazygames.ts` (SDK wrapper) and `src/platform/services.ts` (what the game calls). Every call is a no-op if the SDK is blocked, fails to start, or reports the environment as `disabled`, so the game still runs.
 
-- **Script and init:** the CrazyGames build puts `crazygames-sdk-v3.js` in `<head>`. Boot awaits `SDK.init()` (giving up after 5 s), then calls `loadingStart`, sets up the game, and calls `loadingStop` on the first rendered frame. That frame is already the race, with no clicks.
+- **Script and init:** the CrazyGames build puts `crazygames-sdk-v3.js` in `<head>`. Boot awaits `SDK.init()` (giving up after 5 s), then calls `loadingStart`, sets up the game, and calls `loadingStop` on the first rendered frame. For a new player that frame is already the race, with no clicks. Saved data (settings included) is read only once the SDK has started (`storageReady` in `platform/storage.ts`): reading it any earlier used to remember the defaults for the whole visit, so settings reset every time.
+- **Pause** is P in every hint, since Esc also leaves fullscreen there (Esc still pauses).
+- **Slow devices:** if the first 6 s of a race average under 28 fps and you haven't chosen the graphics yourself, they drop to Fast (`GRAPHICS` in `config/race.ts`), with a note on screen.
+- **No server of our own:** the cloud save (Supabase) is off in the CrazyGames build; the data module keeps progress with the player's account.
 - **Data:** saved data goes through the SDK `data` module only, as the docs ask. localStorage is used only if the SDK isn't available or reports `dataModuleDisabled`.
 - **Gameplay events:**
   - `gameplayStart` when GO appears and when you resume;

@@ -20,8 +20,24 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  // A new player lands straight in a race, with how to drive on screen; next time, the menu.
   await page.goto('http://127.0.0.1:5178');
   await page.waitForFunction(() => window.__game);
+  await page.waitForFunction(() => document.documentElement.dataset.screen === 'race');
+  assert.equal(await page.locator('.hud-coach').isVisible(), true, 'how to drive, on a first visit');
+  assert.match(await page.locator('.hud-coach').innerText(), /Accelerate[\s\S]*Steer[\s\S]*Brake/);
+  await page.screenshot({ path: 'test-results/first-visit.png' });
+  await page.goto('http://127.0.0.1:5178');
+  await page.waitForFunction(() => window.__game);
+  await page.waitForFunction(() => document.documentElement.dataset.screen === 'menu');
+  // One click from the menu to a race; Race settings opens the setup.
+  await page.getByRole('button', { name: /Race this track/ }).click();
+  await page.waitForFunction(() => document.documentElement.dataset.screen === 'race');
+  assert.equal(await page.locator('.hud-coach').isVisible(), false, 'no how-to card once you have played');
+  await page.evaluate(() => window.__game.go('menu'));
+  await page.getByRole('button', { name: /Race settings/ }).click();
+  await page.waitForFunction(() => document.documentElement.dataset.screen === 'setup');
+  await page.evaluate(() => window.__game.go('menu'));
   await page.keyboard.press('e');
   await page.locator('.editor').waitFor();
   await page.locator('.studio-blank').click();
@@ -70,6 +86,7 @@ try {
   const bounds = await page.locator('.studio-welcome').boundingBox();
   assert.ok(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 844 && bounds.y + bounds.height <= 390, 'mobile welcome stays within viewport');
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  await phone.addInitScript(() => { if (!localStorage.getItem('inkcircuit.settings')) localStorage.setItem('inkcircuit.settings', JSON.stringify({ played: true, graphicsChosen: true })); });
   phone.on('pageerror', (error) => errors.push(error.message));
   await phone.goto('http://127.0.0.1:5178');
   await phone.waitForFunction(() => window.__game);
@@ -84,6 +101,7 @@ try {
   await phone.screenshot({ path: 'test-results/studio-phone.png' });
   // Career: start one, qualify (skipped: no time, the back of the grid), and the grid of twenty is kept in the paddock.
   const career = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await career.addInitScript(() => { if (!localStorage.getItem('inkcircuit.settings')) localStorage.setItem('inkcircuit.settings', JSON.stringify({ played: true, graphicsChosen: true })); });
   career.on('pageerror', (error) => errors.push(error.message));
   await career.goto('http://127.0.0.1:5178');
   await career.waitForFunction(() => window.__game);
@@ -194,6 +212,7 @@ try {
   await career.screenshot({ path: 'test-results/career-native-allocation.png' });
   // A custom twelfth team: its two colours and paid hires must survive boot and a full 24-car grid.
   const custom = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await custom.addInitScript(() => { if (!localStorage.getItem('inkcircuit.settings')) localStorage.setItem('inkcircuit.settings', JSON.stringify({ played: true, graphicsChosen: true })); });
   custom.on('pageerror', (error) => errors.push(error.message));
   await custom.goto('http://127.0.0.1:5178');
   await custom.waitForFunction(() => window.__game);

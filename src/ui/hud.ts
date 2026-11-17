@@ -30,6 +30,7 @@ export class Hud {
   private readonly center: HTMLElement;
   private readonly speedValue: HTMLElement;
   private readonly hint: HTMLElement;
+  private readonly coach: HTMLElement;
   private readonly debug: HTMLElement;
   private readonly flag: HTMLElement;
   private readonly damage: HTMLElement;
@@ -142,7 +143,9 @@ export class Hud {
     this.draft = h('div', { class: 'hud-draft', text: STR.race.slipstream });
     this.hint = h('div', { class: 'hud-hint' });
     this.debug = h('div', { class: 'hud-debug' });
-    this.root = h('div', { class: 'screen hud' }, top, timer, this.minimap.root, this.center, speed, this.draft, this.drsBanner, this.weather, this.flag, this.picker, this.hint, this.debug);
+    this.coach = h('div', { class: 'hud-coach' });
+    this.coach.hidden = true;
+    this.root = h('div', { class: 'screen hud' }, top, timer, this.minimap.root, this.center, speed, this.draft, this.drsBanner, this.weather, this.flag, this.picker, this.hint, this.coach, this.debug);
   }
 
   /** Medal targets under the timer; the ones your best lap has won are lit. */
@@ -380,6 +383,22 @@ export class Hud {
   }
 
   /** Shows a controls hint for `seconds`. */
+  /**
+   * A new player's first race: how to drive, as key caps ("W ↑ Accelerate")
+   * or, on a touch screen, in words; across the middle-bottom of the screen
+   * until they've got going (see RaceScreen).
+   */
+  showCoach(rows: readonly { keys: readonly string[]; what: string }[] | string): void {
+    this.coach.replaceChildren(h('div', { class: 'hud-coach-title', text: STR.race.coachTitle }));
+    if (typeof rows === 'string') this.coach.append(h('p', { class: 'hud-coach-text', text: rows }));
+    else for (const r of rows) this.coach.append(h('div', { class: 'hud-coach-row' }, h('span', { class: 'hud-coach-keys' }, ...r.keys.map((k) => h('kbd', { text: k }))), h('span', { text: r.what })));
+    this.coach.hidden = false;
+  }
+
+  hideCoach(): void {
+    this.coach.hidden = true;
+  }
+
   showHint(text: string, seconds = 8): void {
     this.hint.textContent = text;
     this.hint.classList.add('visible');

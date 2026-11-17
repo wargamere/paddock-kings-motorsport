@@ -22,7 +22,8 @@ const GROUPS: readonly TrackGroup[] = ['builtIn', 'world', 'mine'];
 
 /**
  * MENU state (the boot screen): the current track turning slowly in 3D behind
- * a panel with Race this track (which opens the race setup), Draw a track and
+ * a panel with Race this track (which starts a race right away, as last set up;
+ * Race settings changes it), Draw a track and
  * My tracks, a track picker, and sound / graphics / units toggles.
  */
 export class MenuScreen implements Screen {
@@ -46,6 +47,8 @@ export class MenuScreen implements Screen {
   private readonly trackPos: HTMLElement;
   private readonly orbit = new TrackOrbit();
   private readonly careerHint: HTMLElement;
+  /** What Race this track will race (it starts right away). */
+  private readonly raceHint: HTMLElement;
 
   constructor(game: GameContext) {
     this.game = game;
@@ -55,6 +58,7 @@ export class MenuScreen implements Screen {
     this.trackBest = h('div', { class: 'menu-track-best' });
     this.trackPos = h('div', { class: 'menu-track-pos' });
     this.careerHint = h('span', { class: 'menu-hint' });
+    this.raceHint = h('span', { class: 'menu-hint' });
     this.groupChoice = segmented<TrackGroup>(
       GROUPS.map((g) => [g, STR.groups[g]]),
       (g) => this.pickGroup(g),
@@ -83,7 +87,7 @@ export class MenuScreen implements Screen {
         h(
           'div',
           { class: 'menu' },
-          h('div', { class: 'menu-choice' }, button(M.race, () => this.game.openSetup(), { icon: '🏁', class: 'primary', key: 'Enter' }), h('span', { class: 'menu-hint', text: M.raceHint })),
+          h('div', { class: 'menu-choice' }, button(M.race, () => this.game.start(), { icon: '🏁', class: 'primary', key: 'Enter' }), h('div', { class: 'menu-race-line' }, this.raceHint, button(M.settings, () => this.game.openSetup(), { icon: '⚙', class: 'small', key: 'S' }))),
           h('div', { class: 'menu-choice' }, button(M.career, () => this.game.go('career'), { icon: '🏆', key: 'K' }), this.careerHint),
           h(
             'div',
@@ -140,8 +144,9 @@ export class MenuScreen implements Screen {
       (e) => {
         if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
         const act: Record<string, () => void> = {
-          Enter: () => this.game.openSetup(),
-          NumpadEnter: () => this.game.openSetup(),
+          Enter: () => this.game.start(),
+          NumpadEnter: () => this.game.start(),
+          KeyS: () => this.game.openSetup(),
           KeyE: () => this.game.go('editor'),
           KeyK: () => this.game.go('career'),
           KeyL: () => this.game.go('library'),
@@ -230,6 +235,8 @@ export class MenuScreen implements Screen {
       b.title = this.lists[g].length ? `${STR.groups[g]} (${this.lists[g].length})` : STR.menu.noMine;
     }
     this.trackPos.textContent = fmt(STR.menu.position, { i: this.index + 1, n: this.lists[this.group].length });
+    const setup = this.game.setup;
+    this.raceHint.textContent = setup.mode === 'practice' ? STR.menu.practiceNow : fmt(setup.opponents ? STR.menu.raceNow : STR.menu.raceNowAlone, { laps: setup.laps, n: setup.opponents });
     // The career under way, in a line.
     const career = this.game.career.save;
     if (!career) this.careerHint.textContent = STR.menu.careerHint;
@@ -260,7 +267,7 @@ export class MenuScreen implements Screen {
 
   private toggleGraphics(): void {
     const graphics = settings().graphics === 'full' ? 'fast' : 'full';
-    updateSettings({ graphics });
+    updateSettings({ graphics, graphicsChosen: true });
     const v = this.game.view3d;
     if (v) {
       v.setQuality(graphics);

@@ -1,7 +1,7 @@
 import { browserSessionStore, cloudConfig, CloudSync, crazyGamesBackend, webBackend } from './cloud.ts';
 import { cg, crazyGamesReady, initCrazyGames } from './crazygames.ts';
 import { PLATFORM } from './platform.ts';
-import { onStorageWrite, storage } from './storage.ts';
+import { markStorageReady, onStorageWrite, storage } from './storage.ts';
 
 /**
  * Platform services the game calls without knowing which build it is in.
@@ -55,6 +55,7 @@ export const platform = {
   async init(): Promise<void> {
     if (PLATFORM !== 'crazygames') return;
     const ok = await initCrazyGames();
+    markStorageReady();
     log(ok ? 'init' : 'init:unavailable');
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', syncGameplay);
   },
@@ -67,7 +68,9 @@ export const platform = {
    * call it before the game reads storage. Never rejects.
    */
   async startCloud(legacyKeys: readonly string[]): Promise<void> {
-    const cfg = cloudConfig();
+    // (On CrazyGames the SDK's data module already keeps a logged-in player's progress
+    // with their account, so the build talks to no server of its own.)
+    const cfg = PLATFORM === 'crazygames' ? null : cloudConfig();
     if (!cfg) return;
     storage.seedKeys(legacyKeys);
     const begin = async (): Promise<boolean> => {
