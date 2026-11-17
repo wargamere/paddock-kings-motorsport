@@ -49,4 +49,4 @@ The full-screen recap celebrates constructors' results and both drivers' champio
 
 Up to 200 completed-season reports retain the team's name, both drivers' names/results, performance index and prize, even after later renames or transfers. Older saves begin tracking index gains when this update first sees them; a late baseline is labelled instead of inventing earlier development data. The recap's next-season action opens the calendar editor.
 
-The owner/two-driver structure and negotiation reference is [EA's My Team 2.0 career overview](https://www.ea.com/games/f1/f1-25/news/f1-25-career-deep-dive); timing, seasonal programmes, prices and balance here implement Track Builder's own rules.
+The owner/two-driver structure and negotiation reference is [EA's My Team 2.0 career overview](https://www.ea.com/games/f1/f1-25/news/f1-25-career-deep-dive); timing, seasonal programmes, prices and balance here implement Paddock Kings' own rules.

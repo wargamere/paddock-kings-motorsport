@@ -22,7 +22,7 @@ const out = resolve(process.argv[2] ?? 'dist/crazygames-assets');
 const what = process.argv[3] ?? 'all';
 const scale = Number(process.argv[4] ?? 1);
 const port = 5390;
-const TITLE = 'Track Builder 3D';
+const TITLE = 'Paddock Kings';
 const FPS = 30;
 /** The race filmed for the replay shots, and the one in the rain. */
 const RACE_TRACK = 'world-at-1969';

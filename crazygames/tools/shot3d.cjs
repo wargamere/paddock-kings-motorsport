@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: +W, height: +H } });
   await p.addInitScript(([time, slot, diff]) => {
     const s = {
-      minimap: false, tower: 'off', camera: 'chase', paint: 'yellow',
+      minimap: false, tower: 'off', camera: 'chase', paint: 'yellow', played: true, graphicsChosen: true,
       raceSetup: { mode: 'race', ghost: false, opponents: 7, difficulty: +diff, grid: 'pick', startSlot: +slot, weather: 'dry', time, tyreWear: false, tyres: 'medium' },
     };
     try { localStorage.setItem('inkcircuit.settings', JSON.stringify(s)); localStorage.setItem('inkcircuit.library.manualOnly', 'true'); } catch {}
@@ -19,9 +19,8 @@ const { chromium } = require('playwright');
     await p.waitForTimeout(300);
   }
   console.log('track:', (await p.locator('.menu-track-name, .track-card h3, h3').first().textContent().catch(() => '?'))?.trim());
+  // (Race this track starts the race straight away, as set up above.)
   await p.keyboard.press('Enter');
-  await p.waitForTimeout(800);
-  await p.locator('.race-setup .btn', { hasText: 'Start' }).click();
   await p.addStyleTag({ content: 'body * { visibility: hidden !important; } canvas { visibility: visible !important; }' });
   await p.waitForTimeout(5500);
   await p.keyboard.down('KeyW');

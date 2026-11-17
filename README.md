@@ -1,4 +1,6 @@
-# Track Builder 3D
+# Paddock Kings
+
+(Formerly Track Builder 3D.)
 
 Draw a racetrack, freehand or dot by dot, then race it in 3D against your own ghost. Built for CrazyGames (HTML5), and also playable as a standalone web build.
 
@@ -762,7 +764,7 @@ The code follows https://docs.crazygames.com/sdk/intro/. It lives in `src/platfo
 
 Tested against the real SDK in its `local` mode (localhost): the SDK's own log showed loading start/stop, gameplay start/stop, happytime, rewarded and midgame ads, a username, and data reads in the expected order.
 
-**Submitting:** `npm run package:cg` (Basic Launch) or `npm run package:cg:ads` (Full Launch) builds, checks the CrazyGames limits and leaves one self-contained file to upload in the CrazyGames Developer Portal: `dist/crazygames/index.html`. It also writes a zip of it (`dist/track-builder-3d-crazygames-basic.zip` / `-full.zip`). Upload it in the portal, and choose "Yes, using the Data Module" for Progress Save. The store listing, covers and checklist are in [`crazygames/`](crazygames/).
+**Submitting:** `npm run package:cg` (Basic Launch) or `npm run package:cg:ads` (Full Launch) builds, checks the CrazyGames limits and leaves one self-contained file to upload in the CrazyGames Developer Portal: `dist/crazygames/index.html`. It also writes a zip of it (`dist/paddock-kings-crazygames-basic.zip` / `-full.zip`). Upload it in the portal, and choose "Yes, using the Data Module" for Progress Save. The store listing, covers and checklist are in [`crazygames/`](crazygames/).
 
 ## Status
 

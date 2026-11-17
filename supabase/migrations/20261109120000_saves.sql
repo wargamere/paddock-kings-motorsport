@@ -1,4 +1,4 @@
--- Track Builder 3D: cloud saves. One row per player holding everything the
+-- Paddock Kings: cloud saves. One row per player holding everything the
 -- game saves (settings, saved tracks, best laps and ghosts), as key -> value.
 --
 --   player 'sb:<auth user id>'      web players (an anonymous Supabase sign-in per browser)

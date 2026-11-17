@@ -1,8 +1,8 @@
 # Engineering model
 
-This implements the documented **F1 25 My Team 2.0 workflow**, adapted to Track Builder's existing racing physics and calendar. EA describes separate research and manufacturing, one-car versus two-car production decisions, driver reactions to unequal equipment, championship-dependent resource income and workforce tradeoffs. [EA's 2025 career deep dive](https://www.ea.com/games/f1/f1-25/news/f1-25-career-deep-dive) and [team-owner guide](https://help.ea.com/en/articles/f1/f1-25/how-to-be-a-team-owner/) are the references.
+This implements the documented **F1 25 My Team 2.0 workflow**, adapted to Paddock Kings' existing racing physics and calendar. EA describes separate research and manufacturing, one-car versus two-car production decisions, driver reactions to unequal equipment, championship-dependent resource income and workforce tradeoffs. [EA's 2025 career deep dive](https://www.ea.com/games/f1/f1-25/news/f1-25-career-deep-dive) and [team-owner guide](https://help.ea.com/en/articles/f1/f1-25/how-to-be-a-team-owner/) are the references.
 
-The numerical balance below belongs to Track Builder. It is not a claim to reproduce EA's hidden balance tables, full part catalogue or simulation. No F1 25 artwork or UI assets are used.
+The numerical balance below belongs to Paddock Kings. It is not a claim to reproduce EA's hidden balance tables, full part catalogue or simulation. No F1 25 artwork or UI assets are used.
 
 The RP/cash split also follows the [creative director's currency clarification](https://forums.ea.com/discussions/f1-25-general-discussion-en/f1%C2%AE-25-qa---gavin-cooper-creative-director/12108551/replies/12108993): RP represents research data; cash pays for manufacturing, staff and facilities.
 

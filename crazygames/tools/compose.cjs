@@ -10,7 +10,7 @@ const path = require('path');
     portrait: { w: 800, h: 1200, img: 'port-3.png', grid: 14, stroke: 6,
       card: { x: 40, y: 56, w: 720, h: 262, rot: -3 },
       titleStyle: { left: '34px', top: '30px', fontSize: '104px' },
-      trackBox: { x: 395, y: 22, w: 290, h: 100 }, road: 10 },
+      trackBox: { x: 405, y: 140, w: 270, h: 100 }, road: 10 },
     square: { w: 800, h: 800, img: 'sq-4.png', grid: 14, stroke: 6,
       card: { x: 36, y: 40, w: 728, h: 250, rot: -3 },
       titleStyle: { left: '30px', top: '30px', fontSize: '96px' },

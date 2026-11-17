@@ -4,7 +4,7 @@
  */
 export const STR = {
   /** Working title — change it here and it updates everywhere. */
-  gameName: 'Track Builder 3D',
+  gameName: 'Paddock Kings',
   tagline: 'Dream it. Build it. Race it.',
 
   buttons: {
