@@ -99,7 +99,7 @@ class Game implements GameContext {
       weather: saved?.weather === 'rain' || saved?.weather === 'changing' ? saved.weather : 'dry',
       time: saved?.time === 'day' || saved?.time === 'sunset' || saved?.time === 'night' ? saved.time : 'track',
       tyreWear: saved?.tyreWear === true,
-      tyres: saved?.tyres === 'soft' || saved?.tyres === 'hard' || saved?.tyres === 'wet' ? saved.tyres : 'medium',
+      tyres: saved?.tyres === 'soft' || saved?.tyres === 'hard' || saved?.tyres === 'inter' || saved?.tyres === 'wet' ? saved.tyres : 'medium',
       damage: saved?.damage === true,
       safetyCar: saved?.safetyCar === true,
     };

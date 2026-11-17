@@ -249,7 +249,7 @@ export class Hud {
   }
 
   /**
-   * The tyre choice in a pit stop: each kind (key 1–4) with how long it lasts
+   * The tyre choice in a pit stop: each kind (key 1–5) with how long it lasts
    * here; `pick` gets a tap. Null hides it.
    */
   showTyrePicker(opts: { choices: { compound: Compound; laps: number }[]; selected: Compound; pick: (c: Compound) => void } | null): void {

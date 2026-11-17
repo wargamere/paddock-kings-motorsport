@@ -469,7 +469,7 @@ export class CareerScreen implements Screen {
     const key = `${save.season}:${round}`;
     if (this.tyresFor !== key) {
       this.tyresFor = key;
-      const want: Compound = weather === 'rain' ? 'wet' : save.tyres === 'wet' ? 'medium' : save.tyres;
+      const want: Compound = weather === 'rain' ? 'wet' : save.tyres === 'wet' || save.tyres === 'inter' ? 'medium' : save.tyres;
       if (want !== save.tyres) {
         save.tyres = want;
         this.game.career.write();

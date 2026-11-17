@@ -50,7 +50,7 @@ import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
 import { applyAssists, assistDriver } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
-import { compoundsMet, pickCompound, pitLoss, suggestedSetup, trackLapTime, trackTyreLife, WET_FROM } from './strategy.ts';
+import { bandFor, compoundsMet, pickCompound, pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
 import { RaceEngineer, type EngineerCar, type EngineerView } from './engineer.ts';
 import { Radio } from '../ui/radio.ts';
 import { REPLAY } from '../config/replay.ts';
@@ -251,7 +251,7 @@ export class RaceScreen implements Screen {
   private pitMeshBox = 0;
   /** Tyre warnings shown for this set: 1 = going off soon, 2 = gone off. */
   private tyreWarned = 0;
-  /** The tyres to fit at the pit stop under way (picked with 1–4 or a tap). */
+  /** The tyres to fit at the pit stop under way (picked with 1–5 or a tap). */
   private nextTyres: Compound = 'medium';
   /** The weather the racing line was built for. */
   private lineWet = false;
@@ -379,11 +379,11 @@ export class RaceScreen implements Screen {
     document.addEventListener('visibilitychange', () => document.hidden && this.setPaused(true), {
       signal: this.abort.signal,
     });
-    // In a pit stop, 1–4 pick the tyres.
+    // In a pit stop, 1–5 pick the tyres.
     window.addEventListener(
       'keydown',
       (e) => {
-        const n = /^(?:Digit|Numpad)([1-4])$/.exec(e.code);
+        const n = /^(?:Digit|Numpad)([1-5])$/.exec(e.code);
         if (!n || !this.crew?.busy || this.paused || e.repeat) return;
         this.pickTyres(TYRES.order[Number(n[1]) - 1]);
       },
@@ -733,7 +733,7 @@ export class RaceScreen implements Screen {
       const ev = crew.step(car, dt, this.p2Tyres);
       if (ev === 'start' && car.wear) {
         const left = Math.max(1, s.lapsToRun - s.laps.length);
-        this.p2Tyres = pickCompound(left, car.mediumLife, car.wetness >= WET_FROM ? 1 : 0, car.compound);
+        this.p2Tyres = pickCompound(left, car.mediumLife, car.wetness, car.compound);
         this.hud2.flash(fmt(STR.race.p2Pit, { tyres: STR.tyres.names[this.p2Tyres] }), crew.service);
       }
     }
@@ -1398,7 +1398,7 @@ export class RaceScreen implements Screen {
     if (this.car) this.car.wetness = wetAt(this.car.state);
     for (const o of this.opponents) o.ai.car.wetness = wetAt(o.ai.car.state);
     this.wet = w.lineWet >= 0.5;
-    const raining = w.rain > 0.3;
+    const raining = w.rain > 0.15;
     if (raining !== this.raining) {
       this.raining = raining;
       this.hud.flash(raining ? STR.weather.started : STR.weather.stopped, 'info', 2.5);
@@ -1416,12 +1416,15 @@ export class RaceScreen implements Screen {
     v.setConditions({ time: this.timeOfDay, rain: q(w.rain), wet: q((w.lineWet + w.offWet) / 2) });
     audio.setRain(w.rain);
     const W = STR.weather;
-    const now = w.rain > 0.6 ? W.rain : w.rain > 0.05 ? W.light : W.dry;
+    const now = [W.dry, W.light, W.rain, W.heavy][Weather.level(w.rain)];
     const pct = (x: number) => Math.round(x * 100);
     let text = `${now} · ${fmt(W.track, { n: pct(w.offWet) })}`;
     if (Math.abs(w.lineWet - w.offWet) > 0.08) text += ` · ${fmt(W.line, { n: pct(w.lineWet) })}`;
+    // The tyres for the racing line as it is now.
+    const band = bandFor(w.lineWet);
+    text += ` · ${fmt(W.tyresFor, { tyres: band === 'slick' ? W.slicks : STR.engineer.tyres[band] })}`;
     const f = w.forecast();
-    if (f) text += `\n${fmt(f.to === 'rain' ? W.rainIn : W.dryIn, { s: Math.max(5, Math.round(f.in / 5) * 5) })}`;
+    if (f) text += `\n${fmt({ rain: f.rain > 0.6 ? W.heavyIn : W.rainIn, dry: W.dryIn, heavier: W.heavierIn, lighter: W.lighterIn }[f.to], { s: Math.max(5, Math.round(f.in / 5) * 5) })}`;
     this.hud.setWeather(text);
   }
 
@@ -1432,7 +1435,7 @@ export class RaceScreen implements Screen {
       this.hud.flash(STR.race.repairing, 'info', this.crew?.service ?? CONDITIONS.service);
       audio.beep(660, 0.12);
     } else if (ev === 'start') {
-      // What your engineer planned (else the same kind again), unless you pick another (1–4, or a tap) while the crew works.
+      // What your engineer planned (else the same kind again), unless you pick another (1–5, or a tap) while the crew works.
       this.nextTyres = this.engineer?.plan ?? car.compound;
       this.hud.showTyrePicker({
         choices: TYRES.order.map((c) => ({ compound: c, laps: compoundLife(c, car.wetness, car.mediumLife) })),
@@ -1858,7 +1861,7 @@ export class RaceScreen implements Screen {
       behind: near(order[i + 1]),
       pitting: !!this.crew?.busy || car.state.inPits,
       stops: this.crew?.stops ?? 0,
-      tyres: car.wear ? { compound: car.compound, left: car.tyreLeft, lapsLeft: car.tyreLapsLeft, mediumLife: car.mediumLife, wetness: car.wetness } : null,
+      tyres: car.wear ? { compound: car.compound, left: car.tyreLeft, lapsLeft: car.tyreLapsLeft, mediumLife: car.mediumLife, wetness: car.wetness, lapTime: trackLapTime(this.game.track) } : null,
       damage: car.damageOn ? car.damage : null,
       forecast: this.weather?.forecast() ?? null,
       safetyCar: this.control?.sc ?? 'none',

@@ -11,7 +11,7 @@ import type { Track } from '../track/track.ts';
 import { RacingDriver } from './driver.ts';
 import { along, PitCrew } from './pitStop.ts';
 import { carPace, planLapTime, racingLine, roadPace, speedProfile, type Pace } from './racingLine.ts';
-import { compoundsMet, pickCompound, preferredCompound, ruleCompound, ruleStopDue, suggestedSetup, trackTyreLife } from './strategy.ts';
+import { bandOf, compoundsMet, pickCompound, preferredCompound, ruleCompound, ruleStopDue, suggestedSetup, trackTyreLife, tyreBand } from './strategy.ts';
 import { RaceSession } from './session.ts';
 import { aiCars, TrafficPlanner } from './traffic.ts';
 import type { RacecraftAction } from './racecraft.ts';
@@ -367,17 +367,16 @@ export class AiDriver {
     if (finished || s.lapStart === null) return null;
     if (this.boxCall) return this.boxCall;
     const left = (s.lapsToRun * L - s.raceDistance(st.s)) / L;
-    // The weather: wets once the road is wet enough, slicks once it's dried enough (each car
-    // makes its own call: some early, some late).
-    const k = this.slot % WEATHER.aiToWets.length;
-    const onWets = car.compound === 'wet';
-    const wantWets = car.wear && (onWets ? car.wetness > WEATHER.aiToSlicks[k] : car.wetness > WEATHER.aiToWets[k]);
+    // The weather: intermediates once the road is damp, wets once it's soaked, and back again
+    // as it dries (each car makes its own call: some gamble early, some late).
+    const band = bandOf(car.compound);
+    const want = car.wear ? tyreBand(band, car.wetness, WEATHER.aiBias[this.slot % WEATHER.aiBias.length]) : band;
     // Badly damaged: in for repairs (unless the race is all but over).
     const repairs = car.damageOn && car.damage >= DAMAGE.aiPitAt;
     if (repairs) {
       if (left < C.pitMinLaps) return null;
     } else if (!car.wear) return null;
-    else if (wantWets === onWets) {
+    else if (want === band) {
       // Wear: in now if they'd go off before the box comes round again (give or take its own
       // margin), unless the race is all but over, or they'll last to the finish. Or the
       // two-compound rule: a stop it must make, about half-way.
@@ -387,7 +386,7 @@ export class AiDriver {
       if (!worn && !rule) return null;
     } else if (left < C.pitMinLaps) return null;
     if (!car.wear) return car.compound;
-    const fit = pickCompound(left, car.mediumLife, wantWets ? 1 : 0, this.preference);
+    const fit = want === 'slick' ? pickCompound(left, car.mediumLife, 0, this.preference) : want;
     return this.twoCompounds ? ruleCompound(fit, car.tyresUsed, left, car.mediumLife) : fit;
   }
 

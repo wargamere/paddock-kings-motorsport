@@ -60,18 +60,27 @@ test('no stop when the tyres (just about) last: look after them; and none at all
   assert.equal(RaceEngineer.stopCall(view({ lapsLeft: 0.8 }, { lapsLeft: 0, left: 0 })), null);
 });
 
-test('the weather and damage: wets in the rain, slicks once it dries, repairs for damage', () => {
-  assert.deepEqual(RaceEngineer.stopCall(view({}, { wetness: 0.5 })), { reason: 'rain', tyres: 'wet' });
+test('the weather and damage: inters when it\'s damp, wets when it\'s soaked, slicks once it dries, repairs for damage', () => {
+  assert.deepEqual(RaceEngineer.stopCall(view({}, { wetness: 0.4 })), { reason: 'rain', tyres: 'inter' });
+  assert.deepEqual(RaceEngineer.stopCall(view({}, { wetness: 0.75 })), { reason: 'rain', tyres: 'wet' });
+  assert.equal(RaceEngineer.stopCall(view({}, { wetness: 0.25 })), null, 'only just damp: stay on slicks');
   assert.deepEqual(RaceEngineer.stopCall(view({}, { compound: 'wet', wetness: 0.05 })), { reason: 'dry', tyres: pickCompound(7.5, 5, 0, 'medium') });
-  assert.equal(RaceEngineer.stopCall(view({}, { compound: 'wet', wetness: 0.3 })), null, 'still damp: stay on wets');
+  assert.deepEqual(RaceEngineer.stopCall(view({}, { compound: 'wet', wetness: 0.4 })), { reason: 'dry', tyres: 'inter' }, 'drying: wets to inters');
+  assert.equal(RaceEngineer.stopCall(view({}, { compound: 'inter', wetness: 0.45 })), null, 'damp: stay on inters');
+  assert.equal(RaceEngineer.stopCall(view({}, { compound: 'wet', wetness: 0.55 })), null, 'still wet enough: stay on wets');
   assert.equal(RaceEngineer.stopCall(view({ damage: DAMAGE.aiPitAt }))?.reason, 'damage');
   assert.equal(RaceEngineer.stopCall(view({ damage: DAMAGE.aiPitAt - 0.01 })), null);
   // Without tyre wear: repairs only.
   assert.deepEqual(RaceEngineer.stopCall(view({ tyres: null, damage: 0.6 })), { reason: 'damage', tyres: null });
   const eng = new RaceEngineer();
-  const said = listen(eng, () => view({}, { wetness: 0.5 }), 60, 3);
-  assert.deepEqual(said, [E.box.rain]);
-  assert.equal(eng.plan, 'wet');
+  const said = listen(eng, () => view({}, { wetness: 0.4 }), 60, 3);
+  assert.deepEqual(said, [E.boxInters]);
+  assert.equal(eng.plan, 'inter');
+  // With the lap time known, how much quicker the new tyres are.
+  const call = RaceEngineer.stopCall(view({}, { wetness: 0.8, lapTime: 80 }))!;
+  assert.ok(call.gain! > 1 && call.gain! < 15, `${call.gain} s a lap`);
+  const soaked = listen(new RaceEngineer(), () => view({}, { wetness: 0.8, lapTime: 80 }), 60, 3);
+  assert.deepEqual(soaked, [`${E.box.rain} ${fmt(E.boxGain, { s: call.gain!.toFixed(1), tyres: E.tyres.wet })}`]);
 });
 
 test('the plan for the stop ahead, and a forecast', () => {

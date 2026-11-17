@@ -3006,6 +3006,10 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   --tyre: #f2f2f2;
 }
 
+.tyre-chip[data-compound="inter"] {
+  --tyre: #39b54a;
+}
+
 .tyre-chip[data-compound="wet"] {
   --tyre: #3a8dde;
 }
@@ -3021,7 +3025,8 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   justify-content: center;
   align-items: center;
   gap: 0.4rem;
-  max-width: min(94vw, 46rem);
+  width: max-content;
+  max-width: min(94vw, 58rem);
   padding: 0.45rem 0.6rem;
   border-radius: 0.8rem;
   background: var(--panel-dark);
@@ -3068,6 +3073,10 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
 
 .conditions-panel .segmented .btn.tyre-choice[data-compound="hard"] {
   box-shadow: inset 0 -0.25rem 0 #c9ccd3;
+}
+
+.conditions-panel .segmented .btn.tyre-choice[data-compound="inter"] {
+  box-shadow: inset 0 -0.25rem 0 #39b54a;
 }
 
 .conditions-panel .segmented .btn.tyre-choice[data-compound="wet"] {
@@ -3860,6 +3869,10 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
 
 .career-tyres .btn.tyre-choice[data-compound='hard'].on {
   background: #e4e4df;
+}
+
+.career-tyres .btn.tyre-choice[data-compound='inter'].on {
+  background: #c4ecc0;
 }
 
 .career-tyres .btn.tyre-choice[data-compound='wet'].on {

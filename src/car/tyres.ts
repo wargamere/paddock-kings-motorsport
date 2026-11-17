@@ -18,6 +18,8 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.min(1, Math
 /** Grip of a new set of `c` (a share of the road's) on a road `wetness` wet (0 dry … 1 soaked). */
 export function compoundGrip(c: Compound, wetness: number): number {
   const t = TYRES.compounds[c];
+  // (Intermediates peak on a damp road: through their half-wet grip.)
+  if (t.damp !== undefined) return wetness <= 0.5 ? lerp(t.grip, t.damp, wetness * 2) : lerp(t.damp, t.rainGrip, wetness * 2 - 1);
   return lerp(t.grip, t.rainGrip, wetness);
 }
 

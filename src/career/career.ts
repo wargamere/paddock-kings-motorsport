@@ -153,7 +153,7 @@ const KEY = 'career.v1';
 const teamById = new Map(CAREER.teams.map((t) => [t.id, t]));
 const LENGTHS: readonly RaceLength[] = ['short', 'medium', 'long'];
 const SEASONS: readonly SeasonLength[] = ['short', 'standard', 'full'];
-const COMPOUNDS: readonly Compound[] = ['soft', 'medium', 'hard', 'wet'];
+const COMPOUNDS: readonly Compound[] = ['soft', 'medium', 'hard', 'inter', 'wet'];
 
 /** A throw of the career's dice for `what` (the same every time it's asked): 0..1. */
 function dice(save: Pick<CareerSave, 'seed'>, what: string): number {

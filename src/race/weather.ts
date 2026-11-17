@@ -1,7 +1,7 @@
 import { WEATHER } from '../config/race.ts';
 import type { Weather as WeatherKind } from '../core/screen.ts';
 
-/** A change in the weather: from `t` s into the run, rain (1) or dry (0). */
+/** A change in the weather: from `t` s into the run, rain this hard (0 dry … 1 heavy). */
 interface Change {
   t: number;
   rain: number;
@@ -9,11 +9,14 @@ interface Change {
 
 /**
  * The weather through a run, and how wet the road is. Dry stays dry and
- * rain stays rain; changing weather starts dry, then rain comes (and maybe
- * stops again) at random points in the race, or every few minutes in
- * practice. The road gets wet in the rain and dries out after it, the racing
- * line first (the cars clear it), so for a while there's a dry line on a
- * damp track. Deterministic for a given random source.
+ * rain stays rain; changing weather starts dry, then a shower comes at a
+ * random point in the race: a drizzle that leaves the road damp (for
+ * intermediates) or heavy rain that soaks it (for wets), often getting
+ * heavier or easing part-way through, and maybe stopping again; in practice
+ * it changes every few minutes. The road gets as wet as the rain makes it
+ * and dries out after, the racing line first (the cars clear it), so for a
+ * while there's a dry line on a damp track. Deterministic for a given
+ * random source.
  */
 export class Weather {
   readonly kind: WeatherKind;
@@ -42,16 +45,31 @@ export class Weather {
     if (this.practice) this.planPractice(0);
     else {
       const between = (a: number, b: number) => raceSeconds * (a + (b - a) * rand());
-      this.changes.push({ t: between(W.rainFrom, W.rainTo), rain: 1 });
-      if (rand() < W.stopChance) this.changes.push({ t: between(W.stopFrom, W.stopTo), rain: 0 });
+      const start = between(W.rainFrom, W.rainTo);
+      const first = this.strength();
+      this.changes.push({ t: start, rain: first });
+      const stops = rand() < W.stopChance;
+      const end = stops ? between(W.stopFrom, W.stopTo) : raceSeconds;
+      // Part-way through the shower: heavier (a drizzle) or easing (heavy rain).
+      if (rand() < W.shiftChance && end > start + 2 * W.rainRamp) {
+        const shifted = first < (1 + W.rainMin) / 2 ? Math.min(1, first + W.shiftBy + (1 - first - W.shiftBy) * rand()) : Math.max(W.rainMin, first - W.shiftBy - (first - W.shiftBy - W.rainMin) * rand());
+        this.changes.push({ t: start + (end - start) * (0.35 + 0.3 * rand()), rain: shifted });
+      }
+      if (stops) this.changes.push({ t: end, rain: 0 });
     }
   }
 
-  /** Practice: the next change after `from` s, the opposite of the one before. */
+  /** How hard a shower is: between WEATHER.rainMin and 1. */
+  private strength(): number {
+    return WEATHER.rainMin + (1 - WEATHER.rainMin) * this.rand();
+  }
+
+  /** Practice: the next change after `from` s: rain if it was dry, dry if it was raining. */
   private planPractice(from: number): void {
     const W = WEATHER;
     const last = this.changes.length ? this.changes[this.changes.length - 1].rain : this.target;
-    this.changes.push({ t: from + W.practiceMin + (W.practiceMax - W.practiceMin) * this.rand(), rain: 1 - last });
+    const t = from + W.practiceMin + (W.practiceMax - W.practiceMin) * this.rand();
+    this.changes.push({ t, rain: last > 0 ? 0 : this.strength() });
   }
 
   /** Moves the weather on by `dt` s. */
@@ -81,10 +99,16 @@ export class Weather {
     return this.lineWet + (this.offWet - this.lineWet) * k;
   }
 
-  /** The next change if it's within the forecast (WEATHER.forecast s): rain coming, or stopping. */
-  forecast(): { to: 'rain' | 'dry'; in: number } | null {
+  /** The next change if it's within the forecast (WEATHER.forecast s): rain coming (and how hard), stopping, getting heavier or easing. */
+  forecast(): { to: 'rain' | 'dry' | 'heavier' | 'lighter'; in: number; rain: number } | null {
     const c = this.changes[0];
-    if (!c || c.t - this.time > WEATHER.forecast || (c.rain > 0) === this.target > 0) return null;
-    return { to: c.rain > 0 ? 'rain' : 'dry', in: Math.max(0, c.t - this.time) };
+    if (!c || c.t - this.time > WEATHER.forecast || Math.abs(c.rain - this.target) < 0.05) return null;
+    const to = this.target === 0 ? 'rain' : c.rain === 0 ? 'dry' : c.rain > this.target ? 'heavier' : 'lighter';
+    return { to, in: Math.max(0, c.t - this.time), rain: c.rain };
+  }
+
+  /** How hard it's raining, in words: 0 dry, 1 drizzle, 2 rain, 3 heavy rain. */
+  static level(rain: number): 0 | 1 | 2 | 3 {
+    return rain > 0.8 ? 3 : rain > 0.5 ? 2 : rain > 0.05 ? 1 : 0;
   }
 }

@@ -1,6 +1,6 @@
 import { compoundLife } from '../car/tyres.ts';
 import { HANDLING } from '../config/handling.ts';
-import { AI, CONDITIONS, DEFAULT_SETUP, PIT_LANE, SETUP, TYRES, type CarSetup, type Compound, type WingLevel } from '../config/race.ts';
+import { AI, CONDITIONS, DEFAULT_SETUP, PIT_LANE, SETUP, TYRES, WEATHER, type CarSetup, type Compound, type WingLevel } from '../config/race.ts';
 import { clamp } from '../core/math.ts';
 import { pitLane } from '../track/pitLane.ts';
 import type { Track } from '../track/track.ts';
@@ -53,27 +53,55 @@ export function preferredCompound(slot: number): Compound {
   return (['medium', 'hard', 'soft'] as const)[slot % 3];
 }
 
-/** From this wet (0..1) the wets are the quicker tyres (about where slicks and wets cross; see TYRES.compounds). */
-export const WET_FROM = 0.35;
+/** From this wet (0..1) the wets are the quicker tyres, and from INTER_FROM the intermediates (about where they cross; see TYRES.compounds). */
+export const WET_FROM = WEATHER.wetFrom;
+export const INTER_FROM = WEATHER.interFrom;
+
+/** Which kind of tyre for the weather: slicks (soft, medium, hard), intermediates or wets. */
+export type TyreBand = 'slick' | 'inter' | 'wet';
+const RANK: Record<TyreBand, number> = { slick: 0, inter: 1, wet: 2 };
+export const bandOf = (c: Compound): TyreBand => (c === 'inter' || c === 'wet' ? c : 'slick');
+/** Intermediates or wets: tyres for a wet road. */
+export const wetWeatherTyre = (c: Compound): boolean => bandOf(c) !== 'slick';
+/** The tyres for a road `wetness` wet, by where they cross over. */
+export const bandFor = (wetness: number): TyreBand => (wetness >= WET_FROM ? 'wet' : wetness >= INTER_FROM ? 'inter' : 'slick');
+/** Whether band `a` is for a wetter road than `b`. */
+export const wetterBand = (a: TyreBand, b: TyreBand): boolean => RANK[a] > RANK[b];
 
 /**
- * The tyres to fit for `lapsLeft` laps: wets on a wet road (from WET_FROM
- * wet); in the dry the quickest kind that lasts to the finish (going off at
- * most CONDITIONS.pitEndSlack laps before it), else `preference` (there will
- * be another stop anyway).
+ * The tyres a car on `current` should be on for a road `wetness` wet: a
+ * wetter kind once the road is WEATHER.hysteresis past the crossover, a
+ * drier one once it's that far back the other way (so nobody flip-flops).
+ * `bias` is a gamble: + goes to wetter tyres sooner and back later.
+ */
+export function tyreBand(current: TyreBand, wetness: number, bias = 0): TyreBand {
+  const w = wetness + bias;
+  const up = bandFor(w - WEATHER.hysteresis);
+  if (RANK[up] > RANK[current]) return up;
+  const down = bandFor(w + WEATHER.hysteresis);
+  if (RANK[down] < RANK[current]) return down;
+  return current;
+}
+
+/**
+ * The tyres to fit for `lapsLeft` laps: intermediates or wets on a wet road
+ * (by where they cross over); in the dry the quickest kind that lasts to the
+ * finish (going off at most CONDITIONS.pitEndSlack laps before it), else
+ * `preference` (there will be another stop anyway).
  */
 export function pickCompound(lapsLeft: number, mediumLife: number, wetness: number, preference: Compound): Compound {
-  if (wetness >= WET_FROM) return 'wet';
+  const band = bandFor(wetness);
+  if (band !== 'slick') return band;
   for (const c of ['soft', 'medium', 'hard'] as const) if (compoundLife(c, 0, mediumLife) + CONDITIONS.pitEndSlack >= lapsLeft) return c;
-  return preference;
+  return wetWeatherTyre(preference) ? 'medium' : preference;
 }
 
 /**
  * The two-compound rule (a championship's Grands Prix in the dry): met once a
- * car has raced on two different dry compounds, or on wets at all.
+ * car has raced on two different dry compounds, or on intermediates or wets at all.
  */
 export function compoundsMet(used: readonly Compound[]): boolean {
-  return used.includes('wet') || new Set(used).size >= 2;
+  return used.some(wetWeatherTyre) || new Set(used).size >= 2;
 }
 
 /**
@@ -82,7 +110,7 @@ export function compoundsMet(used: readonly Compound[]): boolean {
  * the quickest that lasts the `lapsLeft` laps, else the longest-lasting.
  */
 export function ruleCompound(want: Compound, used: readonly Compound[], lapsLeft: number, mediumLife: number): Compound {
-  if (want === 'wet' || compoundsMet(used) || !used.includes(want)) return want;
+  if (wetWeatherTyre(want) || compoundsMet(used) || !used.includes(want)) return want;
   const others = (['soft', 'medium', 'hard'] as const).filter((c) => !used.includes(c));
   const lasts = others.find((c) => compoundLife(c, 0, mediumLife) + CONDITIONS.pitEndSlack >= lapsLeft);
   return lasts ?? others[others.length - 1] ?? want;
