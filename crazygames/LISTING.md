@@ -67,10 +67,10 @@ Each command builds the game as **one self-contained `index.html`**: the game's 
 | `covers/cover-landscape.jpg` | 1920 × 1080 (16:9) | Landscape cover |
 | `covers/cover-portrait.jpg` | 800 × 1200 (2:3) | Portrait cover |
 | `covers/cover-square.jpg` | 800 × 800 (1:1) | Square cover |
-| `track-builder-3d-landscape.mp4` | 1920 × 1080 (16:9), 19.5 s | Landscape preview video |
-| `track-builder-3d-portrait.mp4` | 1080 × 1620 (2:3, as the portal asks), 19.5 s | Portrait preview video |
+| `preview-landscape-1920x1080.mp4` | 1920 × 1080 (16:9), 18 s | Landscape preview video |
+| `preview-portrait-1080x1620.mp4` | 1080 × 1620 (2:3, as the portal asks), 18 s | Portrait preview video |
 
-The covers show real in-game footage plus the title only: no other text, icons, store logos or borders, as the cover rules ask. The videos are real gameplay with no mouse cursor, no black bars and no logo screens. They show a track drawn in the editor, then raced against AI cars, then raced at night in the rain. They are rendered frame by frame on a fake clock, so they're smooth. To remake the covers or videos (for example after a name change), see [`tools/README.md`](tools/README.md).
+The covers show real in-game footage plus the title only: no other text, icons, store logos or borders, as the cover rules ask. The videos are an action montage of real gameplay, cut every 1–2 seconds: the launch from the grid (with the title), wheel-to-wheel passes and contacts from the TV and chase cameras, a pack in the rain, a track drawn in the editor in one stroke, and the whole field away from the start with the title to finish. No sound, no fast-forward, no mouse cursor, no black bars or logo screens. Render them with `node scripts/crazygamesAssets.mjs <outDir> videos` (they're not kept in the repository).
 
 **Alternative covers:** `covers/alt/cover-sunset-*.jpg` (the same three sizes): a sunset pack of cars into a corner. **Re-rendering covers and videos** from the game: `PW_CHROMIUM=<chromium> node scripts/crazygamesAssets.mjs <outDir> [covers|videos|all]` (needs ffmpeg for the videos). It steps the game a frame at a time, so the footage is smooth on any machine.
 
