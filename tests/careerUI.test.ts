@@ -22,7 +22,7 @@ const game: GameContext = {
   track: getSampleTrack(0), setTrack(t) { Object.assign(this, { track: t }); },
   ui: ui as unknown as HTMLElement, surface: { w: 1440, h: 900 } as unknown as Surface2D,
   view3d: null, records: new RecordBook(), library: new TrackLibrary(), setup: settings().raceSetup as GameContext['setup'],
-  mode: 'race', lastResult: null, interrupted: false, preview: null,
+  mode: 'race', lastResult: null, interrupted: false, coach: false, preview: null,
   drive() {}, start() {}, openSetup() {}, closeSetup() {}, refreshPaint() {},
   go(id) { if (current === 'career') screen.exit(); current = id; if (id === 'career') screen.enter(); },
   event: null, startEvent(e) { event = e; screen.exit(); current = 'race'; }, career: new CareerStore(), lastReplay: null, replayBack: 'results', watchReplay() {},

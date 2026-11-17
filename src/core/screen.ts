@@ -173,6 +173,8 @@ export interface GameContext {
   readonly replayBack: ScreenId;
   /** True while something outside the game needs it paused (portrait prompt, video ads). */
   interrupted: boolean;
+  /** A new player's first race: show the how-to-drive card (cleared once they've got going). */
+  coach: boolean;
   /** Re-applies the selected paint to the car. */
   refreshPaint(): void;
   /** What the 3D preview shows (set by the editor), and how to race it from there. */

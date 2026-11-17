@@ -216,7 +216,8 @@ export function keyboardHint(b: KeyBindings, opts: { manual: boolean; practice: 
   add(k('camera'), H.camera);
   add(k('mute'), H.mute);
   if (opts.tower) add(k('tower'), H.tower);
-  add(keyLabel(PAUSE_KEY), H.pause);
+  // (The pause key you've set, else Esc: on a games site Esc also leaves fullscreen.)
+  add(k('pause') || keyLabel(PAUSE_KEY), H.pause);
   const reset = b.reset[0];
   if (opts.practice && reset) add(`${keyLabel(reset)} ${keyLabel(reset)}`, H.restart);
   return parts.join(' · ');

@@ -50,7 +50,9 @@ test('key names for the screen', () => {
 
 test('the controls hint is built from the keys you have', () => {
   const plain = keyboardHint(DEFAULT_BINDINGS, { manual: false, practice: false });
-  assert.equal(plain, 'W/↑ drive · S/↓ brake & reverse · A/← D/→ steer · R reset · C camera · M sound · Esc pause');
+  // (Your pause key, not Esc: on a games site Esc also leaves fullscreen. With none set, Esc.)
+  assert.equal(plain, 'W/↑ drive · S/↓ brake & reverse · A/← D/→ steer · R reset · C camera · M sound · P pause');
+  assert.ok(keyboardHint(bindKey(DEFAULT_BINDINGS, 'pause', 0, null).bindings, { manual: false, practice: false }).endsWith('Esc pause'));
   const full = keyboardHint(DEFAULT_BINDINGS, { manual: true, practice: true });
   assert.ok(full.includes('E / Q gear up / down') && full.endsWith('R R restart lap'), full);
   const mine = bindKey(bindKey(DEFAULT_BINDINGS, 'throttle', 0, 'KeyI').bindings, 'camera', 0, null).bindings;

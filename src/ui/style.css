@@ -378,6 +378,78 @@ body {
   opacity: 0.75;
 }
 
+/* A new player's first race: how to drive, low in the middle of the screen. */
+.hud-coach {
+  position: absolute;
+  left: 50%;
+  bottom: 3.4rem;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(92vw, 17rem);
+  max-width: min(92vw, 30rem);
+  padding: 0.7rem 1rem 0.8rem;
+  border-radius: 0.8rem;
+  background: var(--panel-dark);
+  color: #fff;
+  font-size: 0.95rem;
+  pointer-events: none;
+  animation: coach-in 0.4s ease-out;
+}
+
+.hud-coach[hidden] {
+  display: none;
+}
+
+.hud-coach-title {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffd34d;
+}
+
+.hud-coach-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-weight: 700;
+}
+
+.hud-coach-keys {
+  display: flex;
+  gap: 0.25rem;
+  min-width: 6.4rem;
+  justify-content: flex-end;
+}
+
+.hud-coach kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 0.35rem;
+  border-radius: 0.35rem;
+  background: #f4f4f0;
+  color: #14182a;
+  box-shadow: inset 0 -3px 0 #b9bcc6;
+  font: 800 0.85rem/1 system-ui, sans-serif;
+}
+
+.hud-coach-text {
+  margin: 0;
+  text-align: center;
+  line-height: 1.4;
+}
+
+@keyframes coach-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0.6rem);
+  }
+}
+
 .hud-hint {
   position: absolute;
   left: 50%;
@@ -1958,6 +2030,20 @@ body {
   font-size: 0.75rem;
   color: #5a6280;
   text-align: center;
+}
+
+/* Under Race this track: what it will race, and Race settings. */
+.menu-race-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.menu-race-line .btn.small {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
 }
 
 .main-menu .menu.row .btn {
@@ -4328,3 +4414,33 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   contain: none;
 }
 
+
+/* The main menu on a short screen (a games site's small frame, a phone on its side): all of it in view. */
+@media (max-height: 520px) {
+  .main-menu .panel {
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+  }
+  .main-menu .menu-title {
+    font-size: 1.5rem;
+  }
+  .main-menu .menu-tagline,
+  .main-menu .menu-keys,
+  .main-menu .menu-choice > .menu-hint {
+    display: none;
+  }
+  .main-menu .menu-track {
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
+  }
+  .main-menu .menu-track-best,
+  .main-menu .menu-track-pos {
+    display: none;
+  }
+  .main-menu .btn {
+    min-height: 2.1rem;
+  }
+  .main-menu .panel > * + * {
+    margin-top: 0.35rem;
+  }
+}

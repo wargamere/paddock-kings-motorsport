@@ -9,7 +9,7 @@ let browser;
 try {
   let ready=false;for(let i=0;i<100;i++){try{if((await fetch(origin)).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}assert.ok(ready);
   browser=await chromium.launch({executablePath:process.env.PW_CHROMIUM||undefined,args:['--enable-unsafe-swiftshader']});
-  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(() => { if (!localStorage.getItem('inkcircuit.settings')) localStorage.setItem('inkcircuit.settings', JSON.stringify({ played: true, graphicsChosen: true })); });
   await page.goto(origin);await page.waitForFunction(()=>window.__game);
   await page.evaluate(async()=>{
     const {createCustomCareer}=await import('/src/career/teamManagement.ts');

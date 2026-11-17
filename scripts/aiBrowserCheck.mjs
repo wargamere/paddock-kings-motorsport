@@ -28,6 +28,7 @@ try {
   assert.ok(ready, 'parity Vite server starts');
   browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM || undefined, args: ['--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
+  await page.addInitScript(() => { if (!localStorage.getItem('inkcircuit.settings')) localStorage.setItem('inkcircuit.settings', JSON.stringify({ played: true, graphicsChosen: true })); });
   await page.goto(origin);
   const browserState = await page.evaluate(async (artifact) => {
     const [{ loadPolicy }, { LearnedDriver }, { defaultIntent }, { getSampleTrack }, { DrivingEnv, DT }, { updateIntent }] = await Promise.all([

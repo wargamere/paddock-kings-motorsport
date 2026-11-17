@@ -3,14 +3,14 @@ import { audio } from '../audio/audio.ts';
 import { CameraRig } from '../car/camera.ts';
 import { collideCars } from '../car/contact.ts';
 import { carriedTow, slipstream } from '../car/slipstream.ts';
-import { keyboardHint, keysText } from '../car/bindings.ts';
+import { keyboardHint, keyLabel, keysText } from '../car/bindings.ts';
 import { connectedPads, InputManager, type InputAction } from '../car/input.ts';
 import { CarModel } from '../car/model.ts';
 import { currentPaintHex, recordFinishedRun } from '../car/paint.ts';
 import { CarPhysics, CarState, lerpState, NO_INPUT, STANDARD_CAR, type DriveInput } from '../car/physics.ts';
 import { HANDLING } from '../config/handling.ts';
 import { AI_PAINTS, PAINTS } from '../config/paint.ts';
-import { AI, CONDITIONS, DAMAGE, DRS, ENGINEER, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, DRS, ENGINEER, GRAPHICS, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
 import { compoundLife } from '../car/tyres.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { FixedStep } from '../core/fixedStep.ts';
@@ -222,6 +222,11 @@ export class RaceScreen implements Screen {
   private car: CarPhysics | null = null;
   private carTrack: Track | null = null;
   private session: RaceSession | null = null;
+  /** The frame-rate check (see checkFrameRate): racing time and frames counted, and whether it's done. */
+  private readonly fpsCheck = { time: 0, frames: 0 };
+  private fpsChecked = false;
+  /** Seconds of racing with the how-to-drive card up. */
+  private coachTime = 0;
   private readonly recorder = new GhostRecorder();
   /** Ghost being replayed this lap (the best lap when the lap started). */
   private ghost: GhostLap | null = null;
@@ -401,9 +406,61 @@ export class RaceScreen implements Screen {
     );
     this.startRun();
     this.hud.showHint(this.controlsText());
+    // A new player's first race: how to drive, until they've got going.
+    this.coachTime = 0;
+    if (this.game.coach) this.hud.showCoach(this.coachRows());
+  }
+
+  /** The how-to-drive card: your keys as key caps, or in words on a touch screen or gamepad. */
+  private coachRows(): readonly { keys: readonly string[]; what: string }[] | string {
+    const d = this.input.lastDevice;
+    if (d === 'touch') return STR.race.hintTouch;
+    if (d === 'gamepad') return STR.race.hintGamepad;
+    const b = settings().keys;
+    const C = STR.race.coach;
+    const caps = (...actions: (keyof typeof b)[]) => actions.flatMap((a) => b[a].slice(0, 2).map(keyLabel));
+    const rows: { keys: string[]; what: string }[] = [
+      { keys: caps('throttle'), what: C.throttle },
+      { keys: caps('left', 'right'), what: C.steer },
+      { keys: caps('brake'), what: C.brake },
+    ];
+    if (this.drs) rows.push({ keys: caps('boost'), what: C.boost });
+    rows.push({ keys: caps('pause'), what: C.pause });
+    return rows.filter((r) => r.keys.length);
+  }
+
+  /**
+   * A slow computer: if the first seconds of racing (GRAPHICS.checkSeconds)
+   * average under GRAPHICS.minFps, the graphics drop to Fast by themselves
+   * (once, and never if you've chosen them yourself).
+   */
+  private checkFrameRate(dt: number, racing: boolean): void {
+    const s = settings();
+    if (this.fpsChecked || s.graphics !== 'full' || s.graphicsChosen || !racing || dt <= 0 || document.hidden) return;
+    this.fpsCheck.time += dt;
+    this.fpsCheck.frames++;
+    if (this.fpsCheck.time < GRAPHICS.checkSeconds) return;
+    this.fpsChecked = true;
+    if (this.fpsCheck.frames / this.fpsCheck.time >= GRAPHICS.minFps) return;
+    updateSettings({ graphics: 'fast' });
+    this.game.view3d?.setQuality('fast');
+    this.hud.flash(STR.race.graphicsLowered, 'info', 3);
+  }
+
+  /** The how-to-drive card goes once you've driven a little way, or after a while. */
+  private tickCoach(dt: number): void {
+    if (!this.game.coach || !this.session || !this.car || this.paused) return;
+    if (this.session.phase !== 'racing') return;
+    this.coachTime += dt;
+    if (this.coachTime > RACE.coachSeconds || this.session.raceDistance(this.car.state.s) > RACE.coachDistance) {
+      this.game.coach = false;
+      this.hud.hideCoach();
+    }
   }
 
   exit(): void {
+    this.game.coach = false;
+    this.hud.hideCoach();
     this.fx?.clear();
     this.input.detach();
     this.input2.detach();
@@ -1998,6 +2055,7 @@ export class RaceScreen implements Screen {
     const frameStart = performance.now();
 
     if (this.game.interrupted && !this.paused) this.setPaused(true);
+    this.checkFrameRate(dt, session.phase === 'racing' && !this.paused);
     // Gameplay is "on" only while actually driving: not in the countdown, paused or finished.
     platform.setGameplay(session.phase === 'racing' && this.stage !== 'grid' && !this.paused && !this.game.interrupted);
     // Split screen: the gamepads shared out (two: one each; one: player 2's, player 1 has the keyboard).
@@ -2112,6 +2170,7 @@ export class RaceScreen implements Screen {
     this.updateHud(alpha);
     this.hud.tick(dt);
     this.hud2.tick(dt);
+    this.tickCoach(dt);
 
     // Medal/qualifying laps used to add 1,500–4,500 extra physics ticks to
     // one frame. Keep both jobs inside one deadline, after the visible race.
