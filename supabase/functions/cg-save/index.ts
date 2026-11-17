@@ -1,4 +1,4 @@
-// Track Builder 3D: cloud saves for CrazyGames players (a Supabase Edge Function).
+// Paddock Kings: cloud saves for CrazyGames players (a Supabase Edge Function).
 //
 //   GET  /functions/v1/cg-save   -> { data, updated_at } | null   the player's save
 //   PUT  /functions/v1/cg-save   { data } -> { updated_at }        saves it

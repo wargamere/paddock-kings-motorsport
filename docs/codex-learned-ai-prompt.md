@@ -1,6 +1,6 @@
 # Codex task: replace the hand-written AI racers with a learned driving policy
 
-You are working in the **Track Builder 3D** repository (`wargamere/trackbuilder`), a browser racing game in TypeScript + three.js: draw a track, then race it in 3D against AI cars. It ships as a GitHub Pages web build and as a single-file CrazyGames build. Branch from the latest `main`.
+You are working in the **Paddock Kings** repository (formerly Track Builder 3D) (`wargamere/trackbuilder`), a browser racing game in TypeScript + three.js: draw a track, then race it in 3D against AI cars. It ships as a GitHub Pages web build and as a single-file CrazyGames build. Branch from the latest `main`.
 
 Your job is to make the opponents **really AI**: cars driven by a neural-network policy that has **learned** to race through machine learning (imitation learning, then reinforcement learning in self-play). Today they are a large set of hand-tuned rules for every situation. This is a big task. Do it in phases, commit after each one, and keep the game shippable at every commit. Read this whole brief before you write any code.
 

@@ -1,12 +1,12 @@
 // Zips a build folder's contents (index.html at the root of the zip, as the
 // CrazyGames Developer Portal wants), after the size check passes.
-// Usage: node scripts/zipBuild.mjs dist/crazygames dist/track-builder-3d-crazygames.zip
+// Usage: node scripts/zipBuild.mjs dist/crazygames dist/paddock-kings-crazygames.zip
 import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const dir = process.argv[2] ?? 'dist/crazygames';
-const out = resolve(process.argv[3] ?? 'dist/track-builder-3d-crazygames.zip');
+const out = resolve(process.argv[3] ?? 'dist/paddock-kings-crazygames.zip');
 execFileSync('node', ['scripts/size.mjs', dir], { stdio: 'inherit' });
 if (existsSync(out)) rmSync(out);
 try {
