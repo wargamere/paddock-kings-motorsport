@@ -532,6 +532,8 @@ export const TRAFFIC = {
   /** …and counts as clear of it (not following it any more) this much (m) short of that room. */
   passSlack: 0.3,
   passAdvantage: 1.25,
+  /** …and the lane it pulls out into must be that much quicker than the car on average over the stretch it takes to get by (at most this far, m). */
+  passLook: 150,
   /**
    * Push to pass (a help for overtaking you): held up (below pushBelow of its
    * plan, with a slower car that isn't an AI within pushWithin m ahead) for

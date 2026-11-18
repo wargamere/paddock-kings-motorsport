@@ -514,6 +514,10 @@ export class TrafficPlanner {
         const target = this.driver.lateralAt(ahead, offset);
         if ((target - this.driver.lateralAt(ahead, leader.off)) * side < this.passRoom() - TRAFFIC.passSlack) continue;
         if ((this.driver.lateralAt(me.s, offset) - this.driver.lateralAt(me.s, leader.off)) * side < this.passRoom() - TRAFFIC.passSlack) continue;
+        // Only a lane that's really quicker than the car being passed, over the stretch it takes to
+        // get by (with downforce, a lane off the line through fast bends can be far slower).
+        const reach = Math.min(TRAFFIC.passLook, catchTime * this.driver.speedAt(me.s) + 2 * CONTACT.halfLength + TRAFFIC.marginAlong);
+        if (this.driver.laneSpeedShare(me.s, offset, reach) * this.driver.speedAt(me.s) < leader.v + TRAFFIC.passAdvantage) continue;
         const c: LaneChoice = { offset, pass: { car: leader.car, side } };
         const cost = this.cost(me, c, v, off0, leader.car);
         if (cost < passCost) { passChoice = c; passCost = cost; }
