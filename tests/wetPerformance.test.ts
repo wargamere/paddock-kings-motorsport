@@ -90,7 +90,7 @@ test('rolling path windows keep exact speed limits while sampling less geometry 
         const s=start+d, h=DRIVER.pathStep, k=curvature(smooth(s-h,path,onRoad),smooth(s,path,onRoad),smooth(s+h,path,onRoad));
         assert.equal(driver.pathCurvature(s,path,onRoad,true),k);
         const vc=Math.min(driver.pace.maxSpeed,cornerSpeed(k,sample(c.bank,s),driver.pace.grip*DRIVER.offLineGrip,driver.pace.downforce));
-        expected=Math.min(expected,Math.sqrt(vc*vc+2*brakingDecel(driver.pace.brake,vc,sample(c.grade,s),driver.pace.drag)*d));
+        expected=Math.min(expected,Math.sqrt(vc*vc+2*brakingDecel(driver.pace.brake,vc,sample(c.grade,s),driver.pace.drag,driver.pace.downforce)*d));
       }
       samples=0;
       for(let d=0;d<=DRIVER.pathLook;d+=DRIVER.pathStep){ const s=start+d, h=DRIVER.pathStep; smooth(s-h,path,onRoad); smooth(s,path,onRoad); smooth(s+h,path,onRoad); }

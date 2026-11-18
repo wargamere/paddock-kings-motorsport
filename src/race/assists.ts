@@ -1,4 +1,4 @@
-import { angleDelta, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
+import { angleDelta, STANDARD_CAR, type CarPerformance, type CarPhysics, type CarState, type DriveInput } from '../car/physics.ts';
 import { HANDLING } from '../config/handling.ts';
 import { ASSISTS, DEFAULT_SETUP, type CarSetup } from '../config/race.ts';
 import type { Assists } from '../core/settings.ts';
@@ -34,6 +34,14 @@ export function assistDriver(track: Track, wet = false, tune: Readonly<CarPerfor
 }
 
 const scratch: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+
+/** The car's own aids as you've set them (the AI's cars always have them all). */
+export function carAids(car: CarPhysics, a: Assists): void {
+  car.abs = a.abs;
+  car.tc = a.tc;
+  car.stability = a.stability;
+  car.steerHelp = a.steerHelp;
+}
 
 /**
  * Applies the braking and steering assists to the player's input, in place.

@@ -92,20 +92,20 @@ const both = (make: (s: number) => BufferGeometry): BufferGeometry[] => [make(1)
 export function formulaPaint(): BufferGeometry {
   const nose = loft([
     { z: 2.28, w: 0.09, y0: 0.24, y1: 0.33, tw: 0.07 },
-    { z: 1.75, w: 0.17, y0: 0.21, y1: 0.45, tw: 0.13 },
-    { z: 1.05, w: 0.29, y0: 0.18, y1: 0.6, tw: 0.21 },
+    { z: 1.75, w: 0.17, y0: 0.18, y1: 0.45, tw: 0.13 },
+    { z: 1.05, w: 0.29, y0: 0.12, y1: 0.6, tw: 0.21 },
   ]);
   const tub = loft([
-    { z: 1.05, w: 0.29, y0: 0.18, y1: 0.6, tw: 0.21 },
-    { z: 0.5, w: 0.36, y0: 0.16, y1: 0.67, tw: 0.27 },
-    { z: -0.25, w: 0.36, y0: 0.16, y1: 0.67, tw: 0.27 },
+    { z: 1.05, w: 0.29, y0: 0.12, y1: 0.6, tw: 0.21 },
+    { z: 0.5, w: 0.36, y0: 0.07, y1: 0.67, tw: 0.27 },
+    { z: -0.25, w: 0.36, y0: 0.07, y1: 0.67, tw: 0.27 },
   ]);
   const cover = loft([
     { z: -0.08, w: 0.3, y0: 0.2, y1: 0.7, tw: 0.2 },
     { z: -0.3, w: 0.32, y0: 0.2, y1: 1.02, tw: 0.11 },
     { z: -0.62, w: 0.33, y0: 0.2, y1: 0.9, tw: 0.13 },
-    { z: -1.25, w: 0.22, y0: 0.22, y1: 0.58, tw: 0.09 },
-    { z: -1.78, w: 0.12, y0: 0.26, y1: 0.42, tw: 0.06 },
+    { z: -1.25, w: 0.22, y0: 0.08, y1: 0.58, tw: 0.09 },
+    { z: -1.78, w: 0.12, y0: 0.14, y1: 0.42, tw: 0.06 },
   ]);
   const fin = loft([
     { z: -0.5, w: 0.012, y0: 0.9, y1: 1.0 },
@@ -114,10 +114,10 @@ export function formulaPaint(): BufferGeometry {
   // Sidepods: wide at the inlets, narrowing to the rear ("coke bottle").
   const pods = both((s) =>
     loft([
-      { z: 0.6, w: 0.22, y0: 0.18, y1: 0.56, tw: 0.18, x: s * 0.6 },
-      { z: 0.32, w: 0.29, y0: 0.18, y1: 0.6, tw: 0.25, x: s * 0.62 },
-      { z: -0.55, w: 0.25, y0: 0.18, y1: 0.55, tw: 0.2, x: s * 0.56 },
-      { z: -1.2, w: 0.1, y0: 0.2, y1: 0.38, tw: 0.07, x: s * 0.36 },
+      { z: 0.6, w: 0.22, y0: 0.08, y1: 0.56, tw: 0.18, x: s * 0.6 },
+      { z: 0.32, w: 0.29, y0: 0.07, y1: 0.6, tw: 0.25, x: s * 0.62 },
+      { z: -0.55, w: 0.25, y0: 0.07, y1: 0.55, tw: 0.2, x: s * 0.56 },
+      { z: -1.2, w: 0.1, y0: 0.08, y1: 0.38, tw: 0.07, x: s * 0.36 },
     ]),
   );
   return merge([nose, tub, cover, fin, ...pods]);
@@ -156,26 +156,26 @@ export function formulaTrim(look: DamageLook): BufferGeometry {
   const box = (w: number, h: number, d: number, x: number, y: number, z: number, hex = CARBON) => add(new BoxGeometry(w, h, d).translate(x, y, z), hex);
 
   // Floor, plank and diffuser.
-  box(1.5, 0.05, 2.7, 0, 0.12, -0.25);
-  box(0.3, 0.03, 2.4, 0, 0.09, -0.25, PLANK);
+  box(1.62, 0.03, 2.9, 0, 0.06, -0.3);
+  box(0.3, 0.02, 2.4, 0, 0.04, -0.25, PLANK);
   add(loft([
-    { z: -1.5, w: 0.55, y0: 0.12, y1: 0.16 },
-    { z: -2.0, w: 0.55, y0: 0.14, y1: 0.36 },
+    { z: -1.6, w: 0.55, y0: 0.05, y1: 0.08 },
+    { z: -2.05, w: 0.55, y0: 0.08, y1: 0.36 },
   ]), CARBON);
 
   // Front wing: on; hanging off; or gone (the nose bare).
   const frontWing = (): BufferGeometry => {
     const w: BufferGeometry[] = [];
     const b = (wd: number, h: number, d: number, x: number, y: number, z: number, hex = CARBON) => w.push(tint(new BoxGeometry(wd, h, d).translate(x, y, z), hex));
-    b(1.98, 0.035, 0.34, 0, 0.12, 2.16);
-    w.push(tint(new BoxGeometry(1.9, 0.03, 0.2).rotateX(-0.25).translate(0, 0.18, 2.02), CARBON_LIGHT));
-    w.push(tint(new BoxGeometry(1.8, 0.025, 0.14).rotateX(-0.45).translate(0, 0.24, 1.94), CARBON));
-    for (const s of [1, -1]) b(0.03, 0.24, 0.42, s * 0.99, 0.2, 2.12);
+    b(1.98, 0.035, 0.34, 0, 0.08, 2.16);
+    w.push(tint(new BoxGeometry(1.9, 0.03, 0.2).rotateX(-0.25).translate(0, 0.14, 2.02), CARBON_LIGHT));
+    w.push(tint(new BoxGeometry(1.8, 0.025, 0.14).rotateX(-0.45).translate(0, 0.2, 1.94), CARBON));
+    for (const s of [1, -1]) b(0.03, 0.24, 0.42, s * 0.99, 0.16, 2.12);
     return merge(w);
   };
   if (look.front === 0) parts.push(frontWing());
   // (It hangs from its right end, its left end on the road, where the sparks fly: see carEffects.)
-  else if (look.front === 1) parts.push(frontWing().translate(0.99, 0, 0).rotateZ(-0.075).rotateY(0.1).translate(-0.99, 0, 0.03));
+  else if (look.front === 1) parts.push(frontWing().translate(0.99, 0, 0).rotateZ(-0.05).rotateY(0.1).translate(-0.99, 0, 0.03));
 
   // Rear wing: on (endplates, main plane, DRS flap, beam wing, swan neck); bent (one endplate gone, twisted); or gone (stubs).
   const rearWing = (bent: boolean): BufferGeometry => {

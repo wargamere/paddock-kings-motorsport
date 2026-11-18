@@ -47,7 +47,7 @@ import { raceOrder } from './classify.ts';
 import { RaceControl, type ControlCar, type ControlEvent } from './raceControl.ts';
 import { sampleAt, leftOf } from '../track/spline.ts';
 import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
-import { applyAssists, assistDriver } from './assists.ts';
+import { applyAssists, assistDriver, carAids } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
 import { bandFor, compoundsMet, pickCompound, pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
@@ -781,6 +781,7 @@ export class RaceScreen implements Screen {
     const ai = o.ai, car = ai.car, s = ai.session, st = car.state;
     if (!s.canDrive || s.retired) return NO_INPUT;
     if (s.phase === 'finished') return BRAKE;
+    carAids(car, settings().assists);
     let inp = applyAssists(this.game.track, st, this.input2.sample(this.p2Input), settings().assists, this.wet, car.tune, car.setup);
     inp.boost = this.p2Input.boost;
     if (Number.isFinite(ai.raceCap) && st.speed > ai.raceCap) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, st.speed > ai.raceCap + 3 ? 0.4 : 0) };
@@ -1210,6 +1211,7 @@ export class RaceScreen implements Screen {
     if ((session.phase === 'racing' || this.watching) && this.weather.kind === 'changing') this.updateWeather(dt);
     const assists = settings().assists;
     car.gearbox = assists.gears;
+    carAids(car, assists);
     let inp = session.phase === 'racing' ? this.input.sample(this.tickInput) : session.phase === 'finished' ? BRAKE : NO_INPUT;
     if (session.phase === 'racing') inp = applyAssists(this.game.track, car.state, this.tickInput, assists, this.wet, car.tune, car.setup);
     if (this.autopilot && session.phase === 'racing') inp = this.autopilot.drive(car.state);

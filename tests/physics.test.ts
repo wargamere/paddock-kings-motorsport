@@ -194,3 +194,65 @@ test('a car leaning on a barrier at an angle can steer away from it and drive of
   assert.ok(st.lateral < c.wallOffset - HANDLING.halfWidth - 2, `away from it: ${st.lateral.toFixed(2)} m left of the centre`);
   assert.ok(st.speed > 6, `and driving off: ${st.speed.toFixed(1)} m/s`);
 });
+
+test('the full car model: brakes lock without ABS, the rear spins up without traction control, and the aids stop both', () => {
+  const brakeFrom = (speed: number, abs: boolean) => {
+    const car = carAt();
+    car.abs = abs;
+    Object.assign(car.state, { vx: speed, speed });
+    let locked = 0;
+    for (let k = 0; k < HANDLING.tickRate * 0.3; k++) {
+      car.step(input(0, 1, 0));
+      locked = Math.max(locked, car.state.lockup);
+    }
+    return locked;
+  };
+  // Slowly, a stamp on the brakes locks them; at speed the downforce holds them.
+  assert.equal(brakeFrom(20, false), 1, 'locks without ABS');
+  assert.equal(brakeFrom(20, true), 0, 'not with ABS');
+  assert.equal(brakeFrom(55, false), 0, 'at speed the tyres can take it');
+  // Flooring it out of a slow bend: without traction control the rear spins up and steps out.
+  const exit = (tc: boolean) => {
+    const car = carAt();
+    car.tc = tc;
+    car.stability = tc;
+    car.steerHelp = false;
+    Object.assign(car.state, { vx: 10, speed: 10 });
+    let spin = 0;
+    let slip = 0;
+    for (let k = 0; k < HANDLING.tickRate * 1.5; k++) {
+      car.step(input(1, 0, 0.7));
+      spin = Math.max(spin, car.state.wheelspin);
+      slip = Math.max(slip, car.state.slip);
+    }
+    return { spin, slip };
+  };
+  const raw = exit(false);
+  const aided = exit(true);
+  assert.equal(raw.spin, 1, 'wheelspin without traction control');
+  assert.equal(aided.spin, 0, 'none with it');
+  assert.ok(raw.slip > aided.slip * 2, `the rear steps out: sliding ${raw.slip.toFixed(1)} m/s vs ${aided.slip.toFixed(1)}`);
+});
+
+test('the full car model: it brakes harder at speed (downforce), and at the limit the front lets go first', () => {
+  const decel = (speed: number) => {
+    const car = carAt();
+    Object.assign(car.state, { vx: speed, speed });
+    car.step(input(0, 1, 0));
+    car.step(input(0, 1, 0));
+    return -car.state.longAccel;
+  };
+  assert.ok(decel(55) > decel(15) * 1.25, `${decel(55).toFixed(1)} m/s² from 55 m/s vs ${decel(15).toFixed(1)} from 15`);
+  // Turning in hard at speed: it runs wide (the front slides more than the rear), it doesn't spin.
+  const car = carAt();
+  car.steerHelp = false;
+  Object.assign(car.state, { vx: 35, speed: 35 });
+  let maxYaw = 0;
+  for (let k = 0; k < HANDLING.tickRate * 0.8; k++) {
+    car.step(input(0.3, 0, 1));
+    maxYaw = Math.max(maxYaw, Math.abs(car.state.yawRate));
+  }
+  const kinematic = (35 * Math.tan(car.state.steer)) / HANDLING.wheelBase;
+  assert.ok(maxYaw < kinematic, `understeers: yaw ${maxYaw.toFixed(2)} rad/s vs ${kinematic.toFixed(2)} the wheels point to`);
+  assert.ok(maxYaw < 1.5, 'and no spin');
+});

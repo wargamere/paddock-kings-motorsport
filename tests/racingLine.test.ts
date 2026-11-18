@@ -100,5 +100,6 @@ test('the wider the road, the faster the racing line', () => {
   const all = tracks();
   const narrow = new AuthorLap(all[all.length - 2], 1).finish()!;
   const wide = new AuthorLap(all[all.length - 1], 1).finish()!;
-  assert.ok(wide < narrow * 0.98, `18 m road ${wide.toFixed(2)} vs 12 m ${narrow.toFixed(2)}`);
+  // (Less than it was before downforce: the fast bends, where the width helps most, are quick anyway.)
+  assert.ok(wide < narrow * 0.985, `18 m road ${wide.toFixed(2)} vs 12 m ${narrow.toFixed(2)}`);
 });
