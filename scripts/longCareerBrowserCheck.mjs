@@ -36,7 +36,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__game.career.save.contracts.next[1].driver),'gp-piastra');
   assert.deepEqual(await page.evaluate(()=>({drivers:[...window.__game.career.save.entry.drivers],done:JSON.stringify(window.__game.career.save.done)})),original);
   await mkdir('test-results',{recursive:true});await page.screenshot({path:'test-results/career-negotiations-desktop.png'});
-  await page.reload();await page.waitForFunction(()=>window.__game);await page.keyboard.press('k');
+  await page.reload();await page.waitForFunction(()=>window.__game);await page.evaluate(()=>window.__game.go('career'));
   assert.equal(await page.evaluate(()=>window.__game.career.save.contracts.next[1].driver),'gp-piastra');
   await page.evaluate(async()=>{
     const {recordRound,lineup,team}=await import('/src/career/career.ts');const g=window.__game,s=g.career.save;

@@ -106,7 +106,7 @@ try {
   await career.goto('http://127.0.0.1:5178');
   await career.waitForFunction(() => window.__game);
   const nativePalette = await career.locator('.main-menu .btn.primary').evaluate((el) => ({ action: getComputedStyle(el).backgroundColor, ink: getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() }));
-  await career.keyboard.press('k');
+  await career.evaluate(() => window.__game.go('career'));
   await career.getByRole('button', { name: 'Take over an existing team', exact: true }).click();
   await career.locator('.career-name').fill('Tester');
   await career.getByRole('button', { name: /Start career/ }).click();
@@ -140,7 +140,7 @@ try {
   await career.screenshot({ path: 'test-results/season-calendar-phone.png' });
   await career.setViewportSize({ width: 1440, height: 900 });
   await career.screenshot({ path: 'test-results/season-calendar-desktop.png' });
-  await career.reload(); await career.waitForFunction(() => window.__game); await career.keyboard.press('k');
+  await career.reload(); await career.waitForFunction(() => window.__game); await career.evaluate(() => window.__game.go('career'));
   assert.deepEqual(await career.evaluate(() => window.__game.career.save.calendar), calendar, 'calendar survives reload');
   await career.getByRole('button', { name: 'Review team decision', exact: true }).click();
   await career.getByRole('button', { name: 'Promise steady progress', exact: true }).click();
@@ -174,7 +174,7 @@ try {
   await career.locator('.grid-overlay:not([hidden])').waitFor();
   assert.equal(await career.locator('.grid-overlay .standings li').count(), 20);
   await career.getByRole('button', { name: /Back to the paddock/ }).click();
-  await career.reload(); await career.waitForFunction(() => window.__game); await career.keyboard.press('k');
+  await career.reload(); await career.waitForFunction(() => window.__game); await career.evaluate(() => window.__game.go('career'));
   assert.equal(await career.evaluate(() => window.__game.career.save.owner.engineering.production.length), 1, 'manufacturing survives reload');
   await career.locator('.owner-preparation summary').click();
   assert.equal(await career.locator('.career-grid li').count(), 20);
@@ -216,7 +216,7 @@ try {
   custom.on('pageerror', (error) => errors.push(error.message));
   await custom.goto('http://127.0.0.1:5178');
   await custom.waitForFunction(() => window.__game);
-  await custom.keyboard.press('k');
+  await custom.evaluate(() => window.__game.go('career'));
   await custom.getByRole('textbox', { name: 'Team principal name', exact: true }).fill('Founder');
   await custom.getByRole('textbox', { name: 'Team name', exact: true }).fill('Apex Nova Racing');
   await custom.setViewportSize({ width: 390, height: 844 });
@@ -242,7 +242,7 @@ try {
   assert.ok((await custom.locator('.owner-brand').textContent()).includes('Apex Nova Racing'));
   await custom.reload();
   await custom.waitForFunction(() => window.__game);
-  await custom.keyboard.press('k');
+  await custom.evaluate(() => window.__game.go('career'));
   assert.deepEqual(await custom.evaluate(() => window.__game.career.save.entry), entry, 'identity and contracts survive reload');
   await custom.getByRole('button', { name: 'Advance to race weekend', exact: true }).click();
   await custom.getByRole('button', { name: /Qualifying/ }).click();

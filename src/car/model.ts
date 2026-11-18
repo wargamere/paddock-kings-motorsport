@@ -11,7 +11,8 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
-  MeshLambertMaterial,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
   Quaternion,
@@ -19,7 +20,7 @@ import {
   SpotLight,
   Vector3,
 } from 'three';
-import { HANDLING } from '../config/handling.ts';
+import { GRAPHICS3D, HANDLING } from '../config/handling.ts';
 import { DAMAGE_LOOK } from '../config/race.ts';
 import { merge, tint } from '../render/geom.ts';
 import type { CarState } from './physics.ts';
@@ -202,7 +203,7 @@ const WHEELS: [number, number, number][] = [
 export class CarModel {
   readonly root = new Group();
   private readonly body = new Group();
-  private readonly paint: MeshLambertMaterial;
+  private readonly paint: MeshPhysicalMaterial;
   private readonly accent: Mesh;
   private readonly lampMat: MeshBasicMaterial;
   private readonly glow: Mesh;
@@ -226,16 +227,17 @@ export class CarModel {
   constructor(paint = DEFAULT_PAINT, ghostOpacity = 0) {
     const ghost = ghostOpacity > 0;
     const see = ghost ? { transparent: true, opacity: ghostOpacity, depthWrite: false } : {};
-    this.paint = new MeshLambertMaterial({ color: paint, flatShading: true, ...see });
+    // Glossy paint under a clear coat: it catches the sun and reflects the sky.
+    this.paint = new MeshPhysicalMaterial({ color: paint, flatShading: true, roughness: GRAPHICS3D.paintRoughness, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08, ...see });
     const stripes = [
       new BoxGeometry(.3, .025, 1.0).translate(.28, .79, 1.32),
       new BoxGeometry(.3, .025, .94).translate(.28, 1.305, -.45),
       new BoxGeometry(.025, .12, 2.6).translate(.945, .55, 0),
       new BoxGeometry(.025, .12, 2.6).translate(-.945, .55, 0),
     ];
-    this.accent = new Mesh(merge(stripes), new MeshLambertMaterial({ color: 0xffffff, flatShading: true, ...see }));
+    this.accent = new Mesh(merge(stripes), new MeshPhysicalMaterial({ color: 0xffffff, flatShading: true, roughness: GRAPHICS3D.paintRoughness, clearcoat: 1, clearcoatRoughness: 0.08, ...see }));
     this.accent.visible = false;
-    const trimMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true, ...see });
+    const trimMat = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: GRAPHICS3D.trimRoughness, metalness: 0.2, ...see });
     this.lampMat = new MeshBasicMaterial({ vertexColors: true, color: 0xd4d4d4, ...see });
     this.glow = new Mesh(glowGeometry(), new MeshBasicMaterial({ map: glowTexture(), vertexColors: true, transparent: true, depthWrite: false, blending: AdditiveBlending }));
     this.glow.visible = false;
@@ -244,12 +246,16 @@ export class CarModel {
     this.body.add(new Mesh(paintGeometry(), this.paint), this.accent, this.trim, new Mesh(lampGeometry(), this.lampMat), this.glow);
     // Sharing this material with the non-instanced trim makes the renderer
     // switch shader variants twice per car, every frame (especially costly at night).
-    this.wheels = new InstancedMesh(wheelGeometry(), trimMat.clone(), 4);
+    const tyreMat = trimMat.clone();
+    tyreMat.roughness = GRAPHICS3D.tyreRoughness;
+    tyreMat.metalness = 0;
+    this.wheels = new InstancedMesh(wheelGeometry(), tyreMat, 4);
     this.wheels.instanceMatrix.setUsage(DynamicDrawUsage);
     if (!ghost) {
       const shadow = new Mesh(
         new PlaneGeometry(2.4, 4.8).rotateX(-Math.PI / 2),
-        new MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: 0.6 }),
+        // (A soft contact shadow under the car; the sun's shadow falls beside it.)
+        new MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: GRAPHICS3D.contactShadow }),
       );
       shadow.position.y = 0.04;
       shadow.renderOrder = 1;
@@ -257,6 +263,10 @@ export class CarModel {
     }
     this.root.add(this.body, this.wheels);
     if (ghost) this.root.traverse((o) => (o.renderOrder = 2));
+    // Real cars throw shadows in the sun (not the glows, nor a ghost).
+    else {
+      for (const o of [...this.body.children, this.wheels]) if (o !== this.glow) o.castShadow = true;
+    }
     this.placeWheels(0, 0);
     // Wheel centres and their geometry's bounding spheres do not change as
     // they steer/spin. Keep a stable conservative bound so offscreen wheels cull.
@@ -272,7 +282,7 @@ export class CarModel {
   setPaint(hex: number, secondary?: number): void {
     this.paint.color.setHex(hex);
     this.accent.visible = secondary !== undefined;
-    if (secondary !== undefined) (this.accent.material as MeshLambertMaterial).color.setHex(secondary);
+    if (secondary !== undefined) (this.accent.material as MeshPhysicalMaterial).color.setHex(secondary);
   }
 
   /** Lights on (night): the lamps shine and glow, and the headlight beam (if it has one, and `beam`) lights the road. */

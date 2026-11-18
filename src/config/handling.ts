@@ -191,3 +191,34 @@ export const RESOLUTION = {
   minPixelRatio: 0.75,
   stall: 0.25,
 } as const;
+
+/**
+ * The look of the 3D world (render/view3d.ts, car/model.ts). Neutral tone
+ * mapping at `exposure`. Surfaces are physically based: `roughness` 0 is a
+ * mirror, 1 fully matt (a wet road goes from `road` to `wetRoad`, and so
+ * reflects the sky). The sky lights the scene too (`envIntensity`, with the
+ * sun in it `envSun` times as bright as its light), so the hemisphere light
+ * fills in only `hemiShare` of what it used to, and the sun shines `sunBoost`
+ * times as bright. The sun casts shadows over a box `half` m either side of
+ * a point `ahead` m in front of the camera (a `mapSize` texel map), from
+ * `distance` m away. `sunGlow`: the sun's size in the sky (m at 1.8 km).
+ * Cars: paint `paintRoughness` under a clear coat, `trimRoughness` for the
+ * dark trim and glass, `tyreRoughness` for the tyres.
+ */
+export const GRAPHICS3D = {
+  exposure: 1,
+  roughness: { road: 0.92, wetRoad: 0.16, kerb: 0.62, wall: 0.85, prop: 0.82 },
+  envIntensity: 0.4,
+  /** A wet road mirrors the sky: its reflections this many times stronger when soaked. */
+  wetReflect: 3,
+  envSun: 2.5,
+  hemiShare: 0.45,
+  sunBoost: 1.3,
+  shadow: { mapSize: 2048, half: 55, ahead: 22, distance: 170, bias: -0.0008, normalBias: 0.12 },
+  sunGlow: 420,
+  paintRoughness: 0.38,
+  trimRoughness: 0.45,
+  tyreRoughness: 0.9,
+  /** The soft dark patch right under each car (the sun's shadow does the rest). */
+  contactShadow: 0.45,
+} as const;

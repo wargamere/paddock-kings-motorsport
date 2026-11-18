@@ -1,4 +1,5 @@
 import { audio } from '../audio/audio.ts';
+import { FEATURES } from '../config/features.ts';
 import { STR, fmt } from '../config/strings.ts';
 import type { GameContext, Screen } from '../core/screen.ts';
 import { settings, updateSettings } from '../core/settings.ts';
@@ -88,7 +89,7 @@ export class MenuScreen implements Screen {
           'div',
           { class: 'menu' },
           h('div', { class: 'menu-choice' }, button(M.race, () => this.game.start(), { icon: '🏁', class: 'primary', key: 'Enter' }), h('div', { class: 'menu-race-line' }, this.raceHint, button(M.settings, () => this.game.openSetup(), { icon: '⚙', class: 'small', key: 'S' }))),
-          h('div', { class: 'menu-choice' }, button(M.career, () => this.game.go('career'), { icon: '🏆', key: 'K' }), this.careerHint),
+          FEATURES.career ? h('div', { class: 'menu-choice' }, button(M.career, () => this.game.go('career'), { icon: '🏆', key: 'K' }), this.careerHint) : null,
           h(
             'div',
             { class: 'menu row' },
@@ -148,7 +149,7 @@ export class MenuScreen implements Screen {
           NumpadEnter: () => this.game.start(),
           KeyS: () => this.game.openSetup(),
           KeyE: () => this.game.go('editor'),
-          KeyK: () => this.game.go('career'),
+          ...(FEATURES.career ? { KeyK: () => this.game.go('career') } : {}),
           KeyL: () => this.game.go('library'),
           KeyM: () => this.toggleSound(),
           ArrowLeft: () => this.step(-1),
@@ -238,7 +239,7 @@ export class MenuScreen implements Screen {
     const setup = this.game.setup;
     this.raceHint.textContent = setup.mode === 'practice' ? STR.menu.practiceNow : fmt(setup.opponents ? STR.menu.raceNow : STR.menu.raceNowAlone, { laps: setup.laps, n: setup.opponents });
     // The career under way, in a line.
-    const career = this.game.career.save;
+    const career = FEATURES.career ? this.game.career.save : null;
     if (!career) this.careerHint.textContent = STR.menu.careerHint;
     else {
       const round = nextRound(career);

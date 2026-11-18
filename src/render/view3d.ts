@@ -1,5 +1,14 @@
 import {
+  NeutralToneMapping,
+  AdditiveBlending,
   BoxGeometry,
+  CanvasTexture,
+  MeshStandardMaterial,
+  PCFShadowMap,
+  PMREMGenerator,
+  Sprite,
+  SpriteMaterial,
+  type WebGLRenderTarget,
   BufferGeometry,
   Color,
   DirectionalLight,
@@ -11,7 +20,6 @@ import {
   InstancedMesh,
   Mesh,
   MeshBasicMaterial,
-  MeshLambertMaterial,
   Object3D,
   PerspectiveCamera,
   Points,
@@ -23,8 +31,9 @@ import {
   Vector2,
   WebGLRenderer,
   BackSide,
+  Vector3,
 } from 'three';
-import { RESOLUTION } from '../config/handling.ts';
+import { GRAPHICS3D, RESOLUTION } from '../config/handling.ts';
 import { ResolutionGovernor } from './resolution.ts';
 import { THEMES, type Theme } from '../config/themes.ts';
 import type { RoadSurface, ThemeId, TimeOfDay } from '../config/track.ts';
@@ -78,16 +87,26 @@ export class View3D {
   private lastRender = 0;
   private readonly maxAniso: number;
   private readonly mats: {
-    road: MeshLambertMaterial;
-    deck: MeshLambertMaterial;
-    kerb: MeshLambertMaterial;
-    wall: MeshLambertMaterial;
-    prop: MeshLambertMaterial;
-    atlas: MeshLambertMaterial;
-    ground: MeshLambertMaterial;
-    gravel: MeshLambertMaterial;
-    runoffTarmac: MeshLambertMaterial;
+    road: MeshStandardMaterial;
+    deck: MeshStandardMaterial;
+    kerb: MeshStandardMaterial;
+    wall: MeshStandardMaterial;
+    prop: MeshStandardMaterial;
+    atlas: MeshStandardMaterial;
+    ground: MeshStandardMaterial;
+    gravel: MeshStandardMaterial;
+    runoffTarmac: MeshStandardMaterial;
   };
+  /** The sun in the sky (a glow), the sky's light for reflections (made from the sky), and the shadows' aim. */
+  private readonly sunGlow: Sprite;
+  private readonly pmrem: PMREMGenerator;
+  private readonly envScene = new Scene();
+  private readonly envSky: Mesh;
+  private readonly envSun: Mesh;
+  private envTarget: WebGLRenderTarget | null = null;
+  private readonly sunDir = new Vector3(-0.45, 1, 0.3).normalize();
+  private readonly focus = new Vector3();
+  private readonly lookDir = new Vector3();
   private readonly groundTextures = new Map<ThemeId, Texture>();
   private theme: string | null = null;
   private quality: 'full' | 'fast' = 'full';
@@ -100,26 +119,34 @@ export class View3D {
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', stencil: false });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    // Tone mapping that rolls bright highlights off instead of clipping them, but keeps paint colours true (Khronos PBR Neutral); and sun shadows.
+    this.renderer.toneMapping = NeutralToneMapping;
+    this.renderer.toneMappingExposure = GRAPHICS3D.exposure;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = PCFShadowMap;
+    this.pmrem = new PMREMGenerator(this.renderer);
     this.maxAniso = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
 
     const asphalt = makeAsphaltTexture();
     const atlas = makeAtlasTexture();
     for (const t of [asphalt, atlas]) t.anisotropy = this.maxAniso;
+    // Physically based materials: how rough each surface is decides how it catches the sun and the sky.
+    const R = GRAPHICS3D.roughness;
     this.mats = {
       // Ground-level road: drawn after the ground without writing depth, so where
       // the track crosses itself the two stretches overlap instead of flickering.
-      road: new MeshLambertMaterial({ map: asphalt, depthWrite: false }),
+      road: new MeshStandardMaterial({ map: asphalt, depthWrite: false, roughness: R.road }),
       // Raised decks write depth (they must hide a road passing underneath).
-      deck: new MeshLambertMaterial({ map: asphalt, side: DoubleSide }),
-      kerb: new MeshLambertMaterial({ vertexColors: true, flatShading: true }),
-      wall: new MeshLambertMaterial({ vertexColors: true, flatShading: true, side: DoubleSide }),
-      prop: new MeshLambertMaterial({ vertexColors: true, flatShading: true }),
-      atlas: new MeshLambertMaterial({ map: atlas }),
+      deck: new MeshStandardMaterial({ map: asphalt, side: DoubleSide, roughness: R.road }),
+      kerb: new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: R.kerb }),
+      wall: new MeshStandardMaterial({ vertexColors: true, flatShading: true, side: DoubleSide, roughness: R.wall }),
+      prop: new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: R.prop }),
+      atlas: new MeshStandardMaterial({ map: atlas, roughness: R.prop }),
       // The ground is pushed back in depth so the road lying on it never z-fights.
-      ground: new MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 }),
+      ground: new MeshStandardMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4, roughness: 1 }),
       // Run-off beside the road: drawn like the road (after the ground, no depth writes).
-      gravel: new MeshLambertMaterial({ map: makeGroundTexture({ base: '#cdb991', speck: [1, 0.9, 0.74], lo: 140, hi: 235 }), depthWrite: false }),
-      runoffTarmac: new MeshLambertMaterial({ map: asphalt, color: 0xb9bec8, depthWrite: false }),
+      gravel: new MeshStandardMaterial({ map: makeGroundTexture({ base: '#cdb991', speck: [1, 0.9, 0.74], lo: 140, hi: 235 }), depthWrite: false, roughness: 1 }),
+      runoffTarmac: new MeshStandardMaterial({ map: asphalt, color: 0xb9bec8, depthWrite: false, roughness: R.road }),
     };
 
     this.fog = new Fog(0xffffff, 260, 1500);
@@ -127,13 +154,34 @@ export class View3D {
     this.hemi = new HemisphereLight(0xffffff, 0xffffff, 1.6);
     this.sun = new DirectionalLight(0xffffff, 2.2);
     this.sun.position.set(-0.45, 1, 0.3);
-    this.scene.add(this.hemi, this.sun);
+    // The sun's shadows cover a box around where the camera looks (moved with it each frame).
+    const S = GRAPHICS3D.shadow;
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(S.mapSize, S.mapSize);
+    const sc = this.sun.shadow.camera;
+    sc.left = -S.half;
+    sc.right = S.half;
+    sc.top = S.half;
+    sc.bottom = -S.half;
+    sc.near = 1;
+    sc.far = S.distance * 2;
+    this.sun.shadow.bias = S.bias;
+    this.sun.shadow.normalBias = S.normalBias;
+    this.scene.add(this.hemi, this.sun, this.sun.target);
 
     this.sky = this.buildSky();
+    // The sky again, for the light it casts (reflections on paint and a wet road), and a bright sun in it.
+    this.envSky = new Mesh(this.sky.geometry, new MeshBasicMaterial({ vertexColors: true, side: BackSide }));
+    this.envSun = new Mesh(new SphereGeometry(110, 12, 8), new MeshBasicMaterial({ color: 0xffffff }));
+    this.envScene.add(this.envSky, this.envSun);
+    this.sunGlow = new Sprite(new SpriteMaterial({ map: glowTexture(), color: 0xffffff, blending: AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
+    this.sunGlow.scale.setScalar(GRAPHICS3D.sunGlow);
+    this.sunGlow.renderOrder = -1;
     this.ground = this.buildOuterGround();
     this.hills = this.buildHills();
     this.stars = this.buildStars();
-    this.scene.add(this.sky, this.ground, this.hills, this.stars, this.rain.mesh);
+    this.scene.add(this.sky, this.sunGlow, this.ground, this.hills, this.stars, this.rain.mesh);
+    this.ground.receiveShadow = true;
     this.applyTheme('meadow', 'day', 0, 0);
   }
 
@@ -245,7 +293,7 @@ export class View3D {
     g.setAttribute('position', new Float32BufferAttribute(pos, 3));
     g.setAttribute('color', new Float32BufferAttribute(new Float32Array(pos.length), 3));
     g.computeVertexNormals();
-    return new Mesh(g, new MeshLambertMaterial({ vertexColors: true, flatShading: true, side: DoubleSide }));
+    return new Mesh(g, new MeshStandardMaterial({ vertexColors: true, flatShading: true, side: DoubleSide, roughness: 1 }));
   }
 
   /**
@@ -256,6 +304,8 @@ export class View3D {
     // (The automatic resolution starts again for a new setting, and is kept from race to race otherwise.)
     if (q !== this.quality) this.resolution.reset();
     this.quality = q;
+    // (Fast graphics: no shadows; the sky's reflections stay, they cost almost nothing.)
+    this.sun.castShadow = q === 'full';
     this.renderer.setPixelRatio(this.pixelRatio());
     this.applyFog();
     this.rain.configure(q, this.shownTime === 'night', this.shownRain);
@@ -373,9 +423,11 @@ export class View3D {
     this.fog.color.copy(fog);
     this.hemi.color.copy(hemiSky);
     this.hemi.groundColor.copy(hemiGround);
-    this.hemi.intensity = night ? 0.5 : 1.6;
+    // (The sky's light comes from the environment too now, so the hemisphere fills in less.)
+    this.hemi.intensity = (night ? 0.5 : 1.6) * GRAPHICS3D.hemiShare;
     this.sun.color.copy(sun);
-    this.sun.intensity = sunIntensity;
+    this.sun.intensity = sunIntensity * GRAPHICS3D.sunBoost;
+    this.sunDir.copy(this.sun.position).normalize();
 
     const sg = this.sky.geometry;
     const sp = sg.getAttribute('position');
@@ -387,6 +439,17 @@ export class View3D {
     }
     sc.needsUpdate = true;
     this.stars.visible = night && rain < 0.2;
+    // The sun in the sky (hidden behind cloud and at night), and the sky's light from all of it.
+    const glow = night ? 0 : (1 - rain) * (dusk ? 1 : 0.75);
+    this.sunGlow.visible = glow > 0.02;
+    (this.sunGlow.material as SpriteMaterial).color.copy(sun).multiplyScalar(glow);
+    this.envSun.position.copy(this.sunDir).multiplyScalar(1500);
+    (this.envSun.material as MeshBasicMaterial).color.copy(sun).multiplyScalar(night ? 0.2 : (1 - 0.85 * rain) * GRAPHICS3D.envSun);
+    this.envTarget?.dispose();
+    // (Its cameras must see out to the sky, 2 km away.)
+    this.envTarget = this.pmrem.fromScene(this.envScene, 0.02, 1, 5000);
+    this.scene.environment = this.envTarget.texture;
+    this.scene.environmentIntensity = night ? 0.25 : GRAPHICS3D.envIntensity;
 
     // Mountains for the Alps, a low skyline for the city.
     this.hills.scale.y = th.hillScale ?? 1;
@@ -413,9 +476,16 @@ export class View3D {
     // evenly however dark the sky).
     const M = this.mats;
     const wetLook = (dry: number, soaked: number) => new Color(dry).lerp(new Color(soaked), wet);
-    M.road.color.copy(wetLook(0xffffff, 0x7f858f));
-    M.deck.color.copy(wetLook(0xffffff, 0x7f858f));
+    // (Darker when wet, but not as dark as before: the sky's reflection on it lightens it again.)
+    M.road.color.copy(wetLook(0xffffff, 0x969ba4));
+    M.deck.color.copy(wetLook(0xffffff, 0x969ba4));
     M.runoffTarmac.color.copy(wetLook(0xb9bec8, 0x8e939c));
+    // Wet tarmac is smooth and mirror-like: it reflects the sky and the lights.
+    const R = GRAPHICS3D.roughness;
+    for (const m of [M.road, M.deck, M.runoffTarmac]) {
+      m.roughness = R.road + (R.wetRoad - R.road) * wet;
+      m.envMapIntensity = 1 + (GRAPHICS3D.wetReflect - 1) * wet;
+    }
     for (const m of [M.road, M.deck, M.runoffTarmac, M.gravel]) {
       const map = night ? m.map : null;
       if (m.emissiveMap !== map) {
@@ -483,14 +553,17 @@ export class View3D {
     const group = new Group();
     group.name = 'track';
     const owned: BufferGeometry[] = [];
-    const add = (g: BufferGeometry | null, mat: MeshLambertMaterial, order = 0) => {
+    const add = (g: BufferGeometry | null, mat: MeshStandardMaterial, order = 0, cast = false) => {
       if (!g) return;
       const m = new Mesh(g, mat);
       m.renderOrder = order;
+      m.receiveShadow = true;
+      m.castShadow = cast;
       owned.push(g);
       group.add(m);
     };
     const terrain = this.buildTerrainMesh(surf.terrain);
+    terrain.receiveShadow = true;
     owned.push(terrain.geometry);
     group.add(terrain);
     const road = buildRoadGeometry(track.center, surf);
@@ -507,9 +580,9 @@ export class View3D {
     add(buildRunoffGeometry(track, surf, 'gravel'), this.mats.gravel, 0.5);
     add(buildRunoffGeometry(track, surf, 'tarmac'), this.mats.runoffTarmac, 0.5);
     add(buildKerbGeometry(track), this.mats.kerb);
-    add(buildWallGeometry(track, surf), this.mats.wall);
-    add(buildPitGeometry(track, surf), this.mats.wall);
-    add(buildTunnelGeometry(track), this.mats.wall);
+    add(buildWallGeometry(track, surf), this.mats.wall, 0, true);
+    add(buildPitGeometry(track, surf), this.mats.wall, 0, true);
+    add(buildTunnelGeometry(track), this.mats.wall, 0, true);
 
     let pillars: InstancedMesh | null = null;
     if (surf.pillars.length) {
@@ -522,10 +595,17 @@ export class View3D {
         pillars?.setMatrixAt(i, o.matrix);
       });
       pillars.computeBoundingSphere();
+      pillars.castShadow = true;
+      pillars.receiveShadow = true;
       group.add(pillars);
     }
 
     const scenery = buildScenery(track, { prop: this.mats.prop, atlas: this.mats.atlas });
+    // Trees, buildings, grandstands and the gantry throw shadows and catch them.
+    scenery.group.traverse((o) => {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    });
     group.add(scenery.group);
     this.scene.add(group);
     this.trackGroup = group;
@@ -582,8 +662,26 @@ export class View3D {
     }
     this.sky.position.copy(this.camera.position);
     this.stars.position.copy(this.camera.position);
+    this.aimSun(this.camera);
     this.rain.update(this.camera.position, dt);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** The sun's shadow box on where `cam` looks (a little ahead of it), and the sun's glow in its sky. */
+  private aimSun(cam: PerspectiveCamera): void {
+    cam.getWorldDirection(this.lookDir);
+    this.lookDir.y = 0;
+    if (this.lookDir.lengthSq() > 1e-6) this.lookDir.normalize();
+    const S = GRAPHICS3D.shadow;
+    this.focus.copy(cam.position).addScaledVector(this.lookDir, S.ahead);
+    // (Snapped to the shadow map's texels, so shadows don't shimmer as the camera moves.)
+    const texel = (S.half * 2) / S.mapSize;
+    this.focus.x = Math.round(this.focus.x / texel) * texel;
+    this.focus.z = Math.round(this.focus.z / texel) * texel;
+    this.sun.target.position.copy(this.focus);
+    this.sun.position.copy(this.focus).addScaledVector(this.sunDir, S.distance);
+    this.sun.target.updateMatrixWorld();
+    this.sunGlow.position.copy(cam.position).addScaledVector(this.sunDir, 1800);
   }
 
   private split = false;
@@ -611,6 +709,7 @@ export class View3D {
       r.setScissor(0, y, w, height);
       this.sky.position.copy(cam.position);
       this.stars.position.copy(cam.position);
+      this.aimSun(cam);
       this.rain.update(cam.position, d);
       r.render(this.scene, cam);
     }
@@ -623,7 +722,7 @@ export class View3D {
    * the editor's 3D view; returns a function that puts it back.
    */
   hideExtras(): () => void {
-    const keep = new Set<unknown>([this.sky, this.ground, this.hills, this.hemi, this.sun, this.stars, this.rain.mesh, this.trackGroup]);
+    const keep = new Set<unknown>([this.sky, this.sunGlow, this.ground, this.hills, this.hemi, this.sun, this.sun.target, this.stars, this.rain.mesh, this.trackGroup]);
     const hidden = this.scene.children.filter((o) => !keep.has(o) && o.visible);
     for (const o of hidden) o.visible = false;
     return () => {
@@ -655,4 +754,22 @@ let pillarGeo: BufferGeometry | null = null;
 function pillarGeometry(): BufferGeometry {
   pillarGeo ??= tint(new BoxGeometry(1.6, 1, 1.6).translate(0, 0.5, 0), 0xb8bcc4);
   return pillarGeo;
+}
+
+let glowTex: CanvasTexture | null = null;
+/** A soft round glow (the sun in the sky). */
+function glowTexture(): CanvasTexture {
+  if (glowTex) return glowTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.08, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.2, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  glowTex = new CanvasTexture(c);
+  return glowTex;
 }
