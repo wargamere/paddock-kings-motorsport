@@ -23,7 +23,11 @@ import {
 import { GRAPHICS3D, HANDLING } from '../config/handling.ts';
 import { DAMAGE_LOOK } from '../config/race.ts';
 import { merge, tint } from '../render/geom.ts';
+import { formulaAccent, formulaGlows, formulaLamps, formulaPaint, formulaTrim, formulaWheel } from './formula.ts';
 import type { CarState } from './physics.ts';
+
+/** Which car: the open-wheel formula car everyone races, or the saloon (the safety car). */
+export type CarKind = 'formula' | 'saloon';
 
 /** Default paint: the game's highlighter yellow. */
 export const DEFAULT_PAINT = 0xf2b705;
@@ -202,6 +206,7 @@ const WHEELS: [number, number, number][] = [
 /** The player's car: paint body, dark trim, four instanced wheels and a blob shadow (4 draw calls). */
 export class CarModel {
   readonly root = new Group();
+  readonly kind: CarKind;
   private readonly body = new Group();
   private readonly paint: MeshPhysicalMaterial;
   private readonly accent: Mesh;
@@ -224,36 +229,40 @@ export class CarModel {
   private readonly axisY = new Vector3(0, 1, 0);
 
   /** `ghostOpacity` > 0 makes a see-through ghost car (no shadow). */
-  constructor(paint = DEFAULT_PAINT, ghostOpacity = 0) {
+  constructor(paint = DEFAULT_PAINT, ghostOpacity = 0, kind: CarKind = 'formula') {
+    this.kind = kind;
+    const formula = kind === 'formula';
     const ghost = ghostOpacity > 0;
     const see = ghost ? { transparent: true, opacity: ghostOpacity, depthWrite: false } : {};
     // Glossy paint under a clear coat: it catches the sun and reflects the sky.
     this.paint = new MeshPhysicalMaterial({ color: paint, flatShading: true, roughness: GRAPHICS3D.paintRoughness, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08, ...see });
-    const stripes = [
-      new BoxGeometry(.3, .025, 1.0).translate(.28, .79, 1.32),
-      new BoxGeometry(.3, .025, .94).translate(.28, 1.305, -.45),
-      new BoxGeometry(.025, .12, 2.6).translate(.945, .55, 0),
-      new BoxGeometry(.025, .12, 2.6).translate(-.945, .55, 0),
-    ];
-    this.accent = new Mesh(merge(stripes), new MeshPhysicalMaterial({ color: 0xffffff, flatShading: true, roughness: GRAPHICS3D.paintRoughness, clearcoat: 1, clearcoatRoughness: 0.08, ...see }));
+    const stripes = formula
+      ? formulaAccent()
+      : merge([
+          new BoxGeometry(0.3, 0.025, 1.0).translate(0.28, 0.79, 1.32),
+          new BoxGeometry(0.3, 0.025, 0.94).translate(0.28, 1.305, -0.45),
+          new BoxGeometry(0.025, 0.12, 2.6).translate(0.945, 0.55, 0),
+          new BoxGeometry(0.025, 0.12, 2.6).translate(-0.945, 0.55, 0),
+        ]);
+    this.accent = new Mesh(stripes, new MeshPhysicalMaterial({ color: 0xffffff, flatShading: true, roughness: GRAPHICS3D.paintRoughness, clearcoat: 1, clearcoatRoughness: 0.08, ...see }));
     this.accent.visible = false;
     const trimMat = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: GRAPHICS3D.trimRoughness, metalness: 0.2, ...see });
     this.lampMat = new MeshBasicMaterial({ vertexColors: true, color: 0xd4d4d4, ...see });
-    this.glow = new Mesh(glowGeometry(), new MeshBasicMaterial({ map: glowTexture(), vertexColors: true, transparent: true, depthWrite: false, blending: AdditiveBlending }));
+    this.glow = new Mesh(formula ? formulaGlows() : glowGeometry(), new MeshBasicMaterial({ map: glowTexture(), vertexColors: true, transparent: true, depthWrite: false, blending: AdditiveBlending }));
     this.glow.visible = false;
     this.glow.renderOrder = 3;
-    this.trim = new Mesh(trimGeometry(), trimMat);
-    this.body.add(new Mesh(paintGeometry(), this.paint), this.accent, this.trim, new Mesh(lampGeometry(), this.lampMat), this.glow);
+    this.trim = new Mesh(this.trimFor(this.look), trimMat);
+    this.body.add(new Mesh(formula ? formulaPaint() : paintGeometry(), this.paint), this.accent, this.trim, new Mesh(formula ? formulaLamps() : lampGeometry(), this.lampMat), this.glow);
     // Sharing this material with the non-instanced trim makes the renderer
     // switch shader variants twice per car, every frame (especially costly at night).
     const tyreMat = trimMat.clone();
     tyreMat.roughness = GRAPHICS3D.tyreRoughness;
     tyreMat.metalness = 0;
-    this.wheels = new InstancedMesh(wheelGeometry(), tyreMat, 4);
+    this.wheels = new InstancedMesh(formula ? formulaWheel() : wheelGeometry(), tyreMat, 4);
     this.wheels.instanceMatrix.setUsage(DynamicDrawUsage);
     if (!ghost) {
       const shadow = new Mesh(
-        new PlaneGeometry(2.4, 4.8).rotateX(-Math.PI / 2),
+        new PlaneGeometry(formula ? 2.3 : 2.4, formula ? 5.0 : 4.8).rotateX(-Math.PI / 2),
         // (A soft contact shadow under the car; the sun's shadow falls beside it.)
         new MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: GRAPHICS3D.contactShadow }),
       );
@@ -307,7 +316,7 @@ export class CarModel {
 
   /**
    * Shows damage: front-wing damage `wing` and bodywork damage `body` (0..1).
-   * Returns the parts that have just come off ('front': the bumper, 'rear': the
+   * Returns the parts that have just come off ('front': the front wing or bumper, 'rear': the
    * rear wing), for the bits on the road.
    */
   setDamage(wing: number, body: number): ('front' | 'rear')[] {
@@ -315,14 +324,18 @@ export class CarModel {
     const was = this.look;
     if (look.front === was.front && look.rear === was.rear && look.scuffs === was.scuffs) return [];
     this.look = look;
-    this.trim.geometry = trimGeometry(look);
+    this.trim.geometry = this.trimFor(look);
     const off: ('front' | 'rear')[] = [];
     if (look.front === 2 && was.front < 2) off.push('front');
     if (look.rear === 2 && was.rear < 2) off.push('rear');
     return off;
   }
 
-  /** The front bumper is hanging off (it scrapes the road: sparks). */
+  private trimFor(look: DamageLook): BufferGeometry {
+    return this.kind === 'formula' ? formulaTrim(look) : trimGeometry(look);
+  }
+
+  /** The front wing (the saloon's bumper) is hanging off (it scrapes the road: sparks). */
   get hanging(): boolean {
     return this.look.front === 1;
   }

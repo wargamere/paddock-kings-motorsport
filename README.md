@@ -581,8 +581,8 @@ Two more switches in Conditions (both off by default, saved with the rest). Race
   - **At 100 % the car breaks down on the spot** (`CarPhysics.broken`): no drive, it stops where it is and stays there whatever you press.
     - In a race you've retired: *DNF* on the results, no place, no time. The same goes for an AI car, which shows *OUT* at the foot of the timing tower.
     - A retired AI car stands where it stopped for 9 s (`DAMAGE.recoverAfter`): that's yellow flags, and with the safety car on, the safety car. Then the marshals take it away and it's in nobody's way (a test runs twenty cars past one at Spielberg: the other nineteen finish).
-  - **You can see it** (`car/model.ts`, `render/effects.ts`, `render/carEffects.ts`; numbers in `DAMAGE_LOOK`). Every car, yours and the AI's:
-    - The front bumper hangs off one side from 25 % front-wing damage, scraping the road and throwing sparks at speed, and is gone from 60 % (the bare crash structure shows). The rear wing bends from 30 % bodywork damage and is gone from 70 %. Scuffs show from 15 %.
+  - **You can see it** (`car/model.ts`, `car/formula.ts`, `render/effects.ts`, `render/carEffects.ts`; numbers in `DAMAGE_LOOK`). Every car, yours and the AI's:
+    - The front wing hangs off one side from 25 % front-wing damage, scraping the road and throwing sparks at speed, and is gone from 60 % (the bare nose shows). The rear wing bends from 30 % bodywork damage and is gone from 70 %. Scuffs show from 15 %.
     - A part coming off leaves bits of car on the road (in its paint and dark trim), which bounce, slide and lie there for 14 s. So does a hard hit (over 12 m/s); any hit over 4 m/s sparks.
     - From 45 % damage the car smokes, more the worse it gets; once it's broken down, black smoke. Sliding hard smokes the tyres (worn-out tyres sooner).
     - All of it is three draw calls (two pools of point sprites and one of little boxes), whatever the field. Smoke right in front of the camera fades and bits of car within 2.5 m aren't drawn, so neither fills the screen.
@@ -798,7 +798,8 @@ Tested against the real SDK in its `local` mode (localhost): the SDK's own log s
 - [x] Race replays: highlights or the whole race, TV / chase / onboard / helicopter cameras
 - [x] A real F1 weekend in the career: knockout qualifying, sprint weekends, the two-compound rule
 - [x] DRS zones and an overtake boost, for you and the AI
-- [x] Damage you can see: hanging bumpers, missing wings, smoke, sparks and bits of car
+- [x] Damage you can see: hanging front wings, missing wings, smoke, sparks and bits of car
+- [x] Open-wheel formula cars (`car/formula.ts`): nose, tub, sidepods, engine cover and fin, front and rear wings, halo, driver, suspension and wide slicks, in the same footprint as before, so the physics and collisions are unchanged. The safety car stays a saloon
 - [x] Split-screen two-player races
 - [x] AI drivers' characters (aggressive, defensive, rain masters, tyre care) and mistakes (lock-ups, running wide, spins)
 

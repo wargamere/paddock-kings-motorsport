@@ -76,7 +76,7 @@ export function carEffects(fx: RaceEffects, view: CarState, car: CarPhysics, mod
     }
   }
 
-  // Sparks: a hanging bumper scraping the road, and hits.
+  // Sparks: a hanging front wing (or bumper) scraping the road, and hits.
   const sparks = (n: number, left: number, up: number, fwd: number, spread: number) => {
     for (let i = 0; i < n; i++) {
       const [x, y, z] = at(left + jitter(0.3), up, fwd + jitter(0.3));
@@ -84,7 +84,7 @@ export function carEffects(fx: RaceEffects, view: CarState, car: CarPhysics, mod
     }
   };
   // (The hanging end is on the car's left; its sparks fan out from under the side of the car.)
-  if (model.hanging && speed > D.sparkSpeed) sparks(count(Math.min(70, speed * 1.5), dt), 0.85, 0.1, 1.6, 3.5);
+  if (model.hanging && speed > D.sparkSpeed) sparks(count(Math.min(70, speed * 1.5), dt), 0.85, 0.1, model.kind === 'formula' ? 2.1 : 1.6, 3.5);
   if (hit > D.sparkHit) {
     const side = Math.random() < 0.5 ? -1 : 1;
     sparks(Math.min(36, Math.round(hit * 2)), side * HANDLING.halfWidth, 0.4, jitter(1.5), 4);

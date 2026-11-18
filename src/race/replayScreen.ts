@@ -160,7 +160,7 @@ export class ReplayScreen implements Screen {
       this.poses.push(new CarState());
     }
     if (!this.scModel) {
-      this.scModel = new CarModel(0xf4f4f0);
+      this.scModel = new CarModel(0xf4f4f0, 0, 'saloon');
       v.scene.add(this.scModel.root);
     }
     r.cars.forEach((c, i) => {

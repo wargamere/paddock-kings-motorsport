@@ -315,7 +315,7 @@ export class RaceScreen implements Screen {
     this.input.onAction = (a) => this.onAction(a);
     this.model = game.view3d ? new CarModel(currentPaintHex()) : null;
     this.ghostModel = game.view3d ? new CarModel(currentPaintHex(), RACE.ghostOpacity) : null;
-    this.scModel = game.view3d ? new CarModel(0xf4f4f0) : null;
+    this.scModel = game.view3d ? new CarModel(0xf4f4f0, 0, 'saloon') : null;
     this.fx = game.view3d ? new RaceEffects(game.view3d.scene) : null;
     if (this.scModel) {
       this.scModel.root.visible = false;
