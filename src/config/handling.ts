@@ -140,6 +140,89 @@ export const HANDLING = {
   worldLimit: 900,
 } as const;
 
+/**
+ * The car as a real one (car/physics.ts), above walking pace: two axles, each
+ * with its own grip, load and slip angle, so it understeers, oversteers, spins,
+ * locks its brakes and spins its wheels as a race car does.
+ *
+ * - Load: `frontWeight` of the weight on the front wheels at rest. Braking moves
+ *   load forward and accelerating moves it back (the centre of gravity is
+ *   `cgHeight` m up), up to `transferMax` of the car's weight.
+ * - Downforce: every tyre's grip grows by `downforce` × (speed /
+ *   SETUP.downforceSpeed)², on top of the wing's own share: half as much
+ *   again at top speed as in a hairpin.
+ * - Grip: the tyres hold `grip` × the corner speeds the racing line plans for
+ *   (HANDLING.maxLateralAccel and the rest), which leaves the AI something in
+ *   hand. A tyre's sideways force rises with its slip angle up to a peak at
+ *   `peakSlip` rad, then falls away as it slides (Pacejka's curve, shape
+ *   `shape`). Past the peak it holds only `slide` of its grip. It counts as
+ *   sliding (CarState.slip: smoke, squeal) from `slideFrom` of the peak.
+ * - Front and rear grip: the rear has `rearGrip` times the front's (wider
+ *   tyres), so at the limit the car understeers gently, unless the rear's grip
+ *   is used up by the throttle or the brakes. A tyre's grip per unit of load
+ *   falls by `loadSensitivity` × its load over its load at rest.
+ * - Longitudinal grip: each tyre grips `longGrip` times harder along its length
+ *   than across it (as the brakes bite: the rain, the road, the compound; not
+ *   the car's own cornering grip, damage or wear). Driving, they grip only
+ *   `driveGrip` times as hard as sideways, so the engine can spin them up in
+ *   the slow bends and the wet. What it gives to braking or driving it can't give to
+ *   cornering (the friction circle).
+ * - Brakes: at full pedal they ask `brakePower` × HANDLING.brakeDecel, which
+ *   the tyres can take only at speed, with the downforce on them: slower, they
+ *   lock (or ABS holds them at the tyres' limit). They lock the front first
+ *   with the brake balance forward, the rear first with it back (`brakeBias`: the front's share of the braking
+ *   against its share of the load).
+ * - `yawInertia`: how hard the car is to turn (m², its yaw inertia / mass).
+ *
+ * Assists (on for the AI, the player's choice):
+ * - ABS keeps the brakes at `absMargin` of locking, and eases them on tyres
+ *   busy cornering as traction control does the drive (so the car still
+ *   steers, and doesn't spin, braking into a bend): the front's to no less
+ *   than `absSteerFloor` (squared) of their bite.
+ * - Traction control keeps the drive at `tcMargin` of wheelspin, and leaves
+ *   the rear tyres the grip they need for the corner (at least `tcFloor` of
+ *   their pull, squared).
+ * - Steering help keeps the front tyres within `steerHelp` × their peak slip
+ *   (and so counter-steers a sliding car for you).
+ * - Stability control: once the rear tyres slip more than the front ones (and
+ *   more than `escFrom` of their peak), it turns the car back, `escGain` ×
+ *   the excess (rad) × the load (m/s²) in yaw acceleration, at most `escMax`
+ *   × the load.
+ *
+ * At walking pace, below `blendFrom` m/s, the car drives as the simple model
+ * does. It blends into the full model by `blendTo` m/s. Each tick is worked out
+ * in `substeps` steps.
+ */
+export const SIM = {
+  frontWeight: 0.45,
+  cgHeight: 0.18,
+  transferMax: 0.4,
+  downforce: 0.25,
+  grip: 1.15,
+  peakSlip: 0.1,
+  shape: 1.45,
+  slide: 0.75,
+  slideFrom: 0.9,
+  rearGrip: 1.2,
+  loadSensitivity: 0.1,
+  longGrip: 1.55,
+  driveGrip: 0.85,
+  brakePower: 1.5,
+  brakeBias: { front: 0.08, balanced: 0.04, rear: -0.02 },
+  yawInertia: 1.5,
+  absMargin: 0.97,
+  tcMargin: 0.97,
+  tcFloor: 0.2,
+  absSteerFloor: 0.2,
+  steerHelp: 1.15,
+  escFrom: 0.8,
+  escGain: 3,
+  escMax: 0.6,
+  blendFrom: 3,
+  blendTo: 6,
+  substeps: 2,
+} as const;
+
 export const INPUT = {
   /** Gamepad stick dead zone (the rest of the range is rescaled to 0..1). */
   stickDeadZone: 0.15,
@@ -221,4 +304,6 @@ export const GRAPHICS3D = {
   tyreRoughness: 0.9,
   /** The soft dark patch right under each car (the sun's shadow does the rest). */
   contactShadow: 0.45,
+  /** The formula car sits much lower, its floor almost on the road: a darker shadow right under it. */
+  contactShadowFormula: 0.8,
 } as const;

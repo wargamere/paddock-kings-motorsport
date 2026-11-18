@@ -662,9 +662,11 @@ export class AiDriver {
       else inp.throttle = 0;
       if (now.left <= 0) this.mistakeNow = null;
     }
-    const braking = inp.brake >= 0.6 && st.speed > 25;
-    const turning = Math.abs(inp.steer) > 0.35 && st.speed > 15;
-    const powering = inp.throttle > 0.9 && Math.abs(inp.steer) > 0.3 && st.speed > 15;
+    // (Each counts from when it starts until it has clearly ended, so a wavering input is one
+    // chance, not many.)
+    const braking = this.wasBraking ? inp.brake >= 0.3 : inp.brake >= 0.6 && st.speed > 25;
+    const turning = this.wasTurning ? Math.abs(inp.steer) > 0.2 : Math.abs(inp.steer) > 0.35 && st.speed > 15;
+    const powering = this.wasPowering ? inp.throttle > 0.5 && Math.abs(inp.steer) > 0.15 : inp.throttle > 0.9 && Math.abs(inp.steer) > 0.3 && st.speed > 15;
     const edge = { lockup: braking && !this.wasBraking, wide: turning && !this.wasTurning, spin: powering && !this.wasPowering };
     this.wasBraking = braking;
     this.wasTurning = turning;

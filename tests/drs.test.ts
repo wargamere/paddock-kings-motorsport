@@ -25,7 +25,8 @@ test('DRS zones: every real circuit has its real ones (where there is a straight
   }
   const count = (name: string) => drsZones(builtInTracks().find((b) => b.def.name === name)!.track()).length;
   assert.equal(count('Sakhir'), 3);
-  assert.equal(count('Melbourne'), 4);
+  // (Its back straights are one with the car's downforce: the kink between them is taken flat out.)
+  assert.equal(count('Melbourne'), 3);
   assert.equal(count('Monza'), 2);
   assert.equal(count('Monaco'), 1);
   assert.equal(count('Suzuka'), 1);

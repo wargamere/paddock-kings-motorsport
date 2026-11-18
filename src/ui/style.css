@@ -2194,6 +2194,11 @@ body {
 .assists-panel .menu.row {
   justify-content: flex-end;
   margin: 0.2rem 0 0;
+  /* (Always in reach: the panel scrolls under it on short screens.) */
+  position: sticky;
+  bottom: 0;
+  padding-top: 0.4rem;
+  background: linear-gradient(transparent, var(--panel) 35%);
 }
 
 /* Left-aligned like the race setup (beats .overlay .panel's centring). */

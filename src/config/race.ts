@@ -224,9 +224,9 @@ export const SETUP = {
    * (Monza and Las Vegas low, Budapest high), by a few tenths a lap.
    */
   wing: {
-    low: { drag: 0.82, downforce: -0.05 },
+    low: { drag: 0.82, downforce: -0.07 },
     medium: { drag: 1, downforce: 0 },
-    high: { drag: 1.18, downforce: 0.05 },
+    high: { drag: 1.18, downforce: 0.07 },
   },
   downforceSpeed: 40,
   /**
@@ -441,7 +441,7 @@ export const DRIVER = {
   lookBase: 3,
   lookPerSpeed: 0.2,
   /** …plus this share of the line's own curvature, read this many seconds ahead. */
-  curvatureFeed: 0.6,
+  curvatureFeed: 0.3,
   curvaturePreview: 0.1,
   /** Target speed is read this many seconds ahead (so it brakes on time). */
   speedPreview: 0.25,
@@ -532,6 +532,8 @@ export const TRAFFIC = {
   /** …and counts as clear of it (not following it any more) this much (m) short of that room. */
   passSlack: 0.3,
   passAdvantage: 1.25,
+  /** …and the lane it pulls out into must be that much quicker than the car on average over the stretch it takes to get by (at most this far, m). */
+  passLook: 150,
   /**
    * Push to pass (a help for overtaking you): held up (below pushBelow of its
    * plan, with a slower car that isn't an AI within pushWithin m ahead) for

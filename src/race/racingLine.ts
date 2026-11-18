@@ -1,4 +1,4 @@
-import { HANDLING } from '../config/handling.ts';
+import { HANDLING, SIM } from '../config/handling.ts';
 import { STANDARD_CAR, type CarPerformance } from '../car/physics.ts';
 import { RACING_LINE, SETUP, type CarSetup } from '../config/race.ts';
 import { kerbAt, kerbLayout } from '../track/kerbs.ts';
@@ -242,9 +242,16 @@ export function cornerGrip(k: number, bank: number, grip: number): number {
   return Math.max(H.maxLateralAccel * 0.5, H.maxLateralAccel + assist * H.bankGripFactor) * grip;
 }
 
-/** Deceleration available from the brakes at `brake` of their force, plus drag (× `drag`, the wing's), at speed v on slope `grade`. */
-export const brakingDecel = (brake: number, v: number, grade: number, drag = 1): number =>
-  HANDLING.brakeDecel * brake + HANDLING.rollingDrag + HANDLING.aeroDrag * drag * v * v + G * HANDLING.slopeFactor * grade;
+/**
+ * Deceleration available from the brakes at `brake` of their force, plus drag
+ * (× `drag`, the wing's), at speed v on slope `grade`. The brakes can do more
+ * the faster the car goes, as the downforce (the car's own, SIM.downforce, and
+ * the wing's `downforce`) presses the tyres harder into the road, up to
+ * SIM.brakePower times what they do at walking pace.
+ */
+export const brakingDecel = (brake: number, v: number, grade: number, drag = 1, downforce = 0): number =>
+  HANDLING.brakeDecel * brake * Math.min(SIM.brakePower, 1 + (SIM.downforce + downforce) * (v / SETUP.downforceSpeed) ** 2) +
+  HANDLING.rollingDrag + HANDLING.aeroDrag * drag * v * v + G * HANDLING.slopeFactor * grade;
 
 /** The car's top speed on the flat (m/s) with drag × `drag` (the wing): where the engine's pull meets the drag. */
 export function topSpeed(drag = 1, tune: Pick<CarPerformance, 'pull' | 'top'> = STANDARD_CAR): number {
@@ -264,13 +271,14 @@ export function drivingAccel(v: number, pace: Pace, grade: number): number {
 
 /**
  * The speed (m/s) a bend of curvature `k` allows at `grip` (see cornerGrip),
- * with a wing giving `downforce` (more grip the faster: × 1 + downforce ×
- * (v / SETUP.downforceSpeed)², as in the physics). Infinity when the
+ * with the car's downforce and a wing giving `downforce` more (more grip the
+ * faster: × 1 + (SIM.downforce + downforce) × (v / SETUP.downforceSpeed)²,
+ * as in the physics). Infinity when the
  * downforce would hold any speed.
  */
 export function cornerSpeed(k: number, bank: number, grip: number, downforce = 0): number {
   const a = cornerGrip(k, bank, grip);
-  const den = Math.max(Math.abs(k), 1e-5) - (a * downforce) / SETUP.downforceSpeed ** 2;
+  const den = Math.max(Math.abs(k), 1e-5) - (a * (SIM.downforce + downforce)) / SETUP.downforceSpeed ** 2;
   return den <= 1e-7 ? Infinity : Math.sqrt(a / den);
 }
 
@@ -304,7 +312,7 @@ export function speedProfile(track: Track, line: RacingLine, pace: Pace): SpeedP
     for (let round = 0; round < 2; round++) {
       for (let i = n - 1; i >= 0; i--) {
         const j = (i + 1) % n;
-        const reach = Math.sqrt(Math.max(0, arr[j] * arr[j] + 2 * brakingDecel(pace.brake, arr[j], c.grade[i], drag) * line.ds[i]));
+        const reach = Math.sqrt(Math.max(0, arr[j] * arr[j] + 2 * brakingDecel(pace.brake, arr[j], c.grade[i], drag, pace.downforce) * line.ds[i]));
         if (reach < arr[i]) arr[i] = reach;
       }
     }

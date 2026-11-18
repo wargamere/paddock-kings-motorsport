@@ -344,8 +344,12 @@ export class TrafficPlanner {
    */
   private meet(me: CarState, c: LaneChoice, off0: number, o: Near, horizon: number, reachS: number, reachL: number, untilHeld = false) {
     const dt = TRAFFIC.step;
-    // Its pace against ours on the line.
-    const r = Math.min(1.5, o.v / Math.max(3, this.driver.speedAt(me.s + o.ds)));
+    // Its pace against ours on the line. Where our plan has it on a straight (at our top speed), it's
+    // going as fast as it can there: it holds that speed wherever our plan isn't slower (its bends
+    // too, if they're quick enough), and its pace against ours only where they aren't.
+    const planThere = this.driver.speedAt(me.s + o.ds);
+    const r = Math.min(1.5, o.v / Math.max(3, planThere));
+    const flatOut = planThere >= this.driver.pace.maxSpeed - 0.5 && o.v < planThere;
     let sMe = me.s;
     let sO = me.s + o.ds;
     let vMe = Math.max(0, me.speed);
@@ -367,7 +371,8 @@ export class TrafficPlanner {
     let k = 0;
     for (let t = 0; t <= horizon + 1e-9; t += dt) {
       if (k >= forecast.count) {
-        forecast.values[2 * k] = r * this.driver.speedAt(sO);
+        const plan = this.driver.speedAt(sO);
+        forecast.values[2 * k] = flatOut ? Math.min(o.v, plan) : r * plan;
         // (Where it is across the road: worked out when first needed; NaN until then.)
         forecast.values[2 * k + 1] = NaN;
         forecast.count = k + 1;
@@ -509,6 +514,10 @@ export class TrafficPlanner {
         const target = this.driver.lateralAt(ahead, offset);
         if ((target - this.driver.lateralAt(ahead, leader.off)) * side < this.passRoom() - TRAFFIC.passSlack) continue;
         if ((this.driver.lateralAt(me.s, offset) - this.driver.lateralAt(me.s, leader.off)) * side < this.passRoom() - TRAFFIC.passSlack) continue;
+        // Only a lane that's really quicker than the car being passed, over the stretch it takes to
+        // get by (with downforce, a lane off the line through fast bends can be far slower).
+        const reach = Math.min(TRAFFIC.passLook, catchTime * this.driver.speedAt(me.s) + 2 * CONTACT.halfLength + TRAFFIC.marginAlong);
+        if (this.driver.laneSpeedShare(me.s, offset, reach) * this.driver.speedAt(me.s) < leader.v + TRAFFIC.passAdvantage) continue;
         const c: LaneChoice = { offset, pass: { car: leader.car, side } };
         const cost = this.cost(me, c, v, off0, leader.car);
         if (cost < passCost) { passChoice = c; passCost = cost; }

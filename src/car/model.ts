@@ -262,9 +262,9 @@ export class CarModel {
     this.wheels.instanceMatrix.setUsage(DynamicDrawUsage);
     if (!ghost) {
       const shadow = new Mesh(
-        new PlaneGeometry(formula ? 2.3 : 2.4, formula ? 5.0 : 4.8).rotateX(-Math.PI / 2),
+        new PlaneGeometry(formula ? 2.1 : 2.4, formula ? 5.2 : 4.8).rotateX(-Math.PI / 2),
         // (A soft contact shadow under the car; the sun's shadow falls beside it.)
-        new MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: GRAPHICS3D.contactShadow }),
+        new MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: formula ? GRAPHICS3D.contactShadowFormula : GRAPHICS3D.contactShadow }),
       );
       shadow.position.y = 0.04;
       shadow.renderOrder = 1;

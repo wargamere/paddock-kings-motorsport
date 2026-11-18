@@ -124,7 +124,7 @@ export class RacingDriver {
       for (let round = 0; round < 2; round++) {
         for (let i = n - 1; i >= 0; i--) {
           const j = (i + 1) % n;
-          const reach = Math.sqrt(arr[j] * arr[j] + 2 * brakingDecel(brake, arr[j], c.grade[i], this.pace.drag) * c.spacing);
+          const reach = Math.sqrt(arr[j] * arr[j] + 2 * brakingDecel(brake, arr[j], c.grade[i], this.pace.drag, this.pace.downforce) * c.spacing);
           if (reach < arr[i]) arr[i] = reach;
         }
       }
@@ -334,7 +334,7 @@ export class RacingDriver {
       const k = curvatureOf(a, b, q);
       // Off the line it keeps some grip in hand (for moving across, and for others).
       const vc = Math.min(this.pace.maxSpeed, cornerSpeed(k, this.at(c.bank, s1), this.pace.grip * grip, this.pace.downforce));
-      const allowed = Math.sqrt(vc * vc + 2 * brakingDecel(brake, vc, this.at(c.grade, s1), this.pace.drag) * d);
+      const allowed = Math.sqrt(vc * vc + 2 * brakingDecel(brake, vc, this.at(c.grade, s1), this.pace.drag, this.pace.downforce) * d);
       if (allowed < lim) lim = allowed;
     }
     return lim;
