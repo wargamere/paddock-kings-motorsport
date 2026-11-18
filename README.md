@@ -1,6 +1,6 @@
-# Paddock Kings
+# Paddock Kings: Motorsport
 
-(Formerly Track Builder 3D.)
+The full PC version of [Paddock Kings](https://github.com/wargamere/trackbuilder) (the free browser game, formerly Track Builder 3D), heading for Steam: a Windows desktop app with online multiplayer, deeper car physics, and the team-owner career and track editor. It starts from the browser game's code; everything below describes it as it is today.
 
 Draw a racetrack, freehand or dot by dot, then race it in 3D against your own ghost. Built for CrazyGames (HTML5), and also playable as a standalone web build.
 
