@@ -63,7 +63,7 @@ export const STR = {
     noBest: 'No lap yet',
     prev: 'Previous track',
     next: 'Next track',
-    keys: 'Enter race · S race settings · K career · E draw · L track library · ← → change track · ↑ ↓ change list',
+    keys: 'Enter race · S race settings · E draw · L track library · ← → change track · ↑ ↓ change list',
     career: 'Career',
     careerHint: 'Own a team. Develop both cars. Choose your driver each race.',
     /** Under the Career button when one is under way. */
