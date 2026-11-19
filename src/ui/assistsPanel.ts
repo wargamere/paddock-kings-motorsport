@@ -8,11 +8,9 @@ export function assistsSummary(a: Assists): string {
   const A = STR.assists;
   const on = [a.line !== 'off' ? A.summaryLine : '', a.brake ? A.summaryBrake : '', a.steer ? A.summarySteer : ''].filter(Boolean);
   const gears = a.gears === 'manual' ? A.summaryManual : A.summaryAuto;
-  const aidsOff = [a.abs, a.tc, a.stability, a.steerHelp].filter((x) => !x).length;
-  const aids = aidsOff ? ` · ${fmt(A.summaryAidsOff, { n: aidsOff })}` : '';
-  if (!on.length) return (a.gears === 'manual' ? gears.charAt(0).toUpperCase() + gears.slice(1) : A.summaryNone) + aids;
+  if (!on.length) return a.gears === 'manual' ? gears.charAt(0).toUpperCase() + gears.slice(1) : A.summaryNone;
   const list = on.join(', ');
-  return `${list.charAt(0).toUpperCase()}${list.slice(1)} · ${gears}${aids}`;
+  return `${list.charAt(0).toUpperCase()}${list.slice(1)} · ${gears}`;
 }
 
 /**
@@ -26,8 +24,6 @@ export class AssistsPanel {
   private readonly brake: Choice<boolean>;
   private readonly steer: Choice<boolean>;
   private readonly gears: Choice<Assists['gears']>;
-  /** The car's own aids. */
-  private readonly aids: { key: 'abs' | 'tc' | 'stability' | 'steerHelp'; choice: Choice<boolean> }[];
   private readonly gearsHint: HTMLElement;
   private onClose: () => void = () => {};
 
@@ -67,9 +63,6 @@ export class AssistsPanel {
       return h('div', { class: 'field' }, h('span', { class: 'label', text: label }), control, typeof hint === 'string' ? h('p', { class: 'setup-hint', text: hint }) : hint);
     };
     this.gearsHint = h('p', { class: 'setup-hint' });
-    const aidKeys = ['abs', 'tc', 'stability', 'steerHelp'] as const;
-    this.aids = aidKeys.map((key) => ({ key, choice: onOff((v) => set({ [key]: v })) }));
-    const hints = { abs: A.absHint, tc: A.tcHint, stability: A.stabilityHint, steerHelp: A.steerHelpHint };
     const panel = h(
       'div',
       { class: 'panel assists-panel' },
@@ -79,9 +72,6 @@ export class AssistsPanel {
       field(A.brake, this.brake.el, A.brakeHint),
       field(A.steer, this.steer.el, A.steerHint),
       field(A.gears, this.gears.el, this.gearsHint),
-      h('h3', { text: A.car }),
-      h('p', { class: 'assists-intro', text: A.carIntro }),
-      ...this.aids.map(({ key, choice }) => field(A[key], choice.el, hints[key])),
       h('div', { class: 'menu row' }, button(A.done, () => this.close(), { icon: '✓', class: 'primary', key: 'Esc' })),
     );
     panel.setAttribute('role', 'dialog');
@@ -118,7 +108,6 @@ export class AssistsPanel {
     this.brake.set(a.brake);
     this.steer.set(a.steer);
     this.gears.set(a.gears);
-    for (const { key, choice } of this.aids) choice.set(a[key]);
     // The gear keys as you have them.
     const keys = settings().keys;
     this.gearsHint.textContent = fmt(STR.assists.gearsHint, { up: keysText(keys, 'gearUp') || '—', down: keysText(keys, 'gearDown') || '—' });

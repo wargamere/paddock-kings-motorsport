@@ -35,12 +35,16 @@ export function assistDriver(track: Track, wet = false, tune: Readonly<CarPerfor
 
 const scratch: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
-/** The car's own aids as you've set them (the AI's cars always have them all). */
-export function carAids(car: CarPhysics, a: Assists): void {
-  car.abs = a.abs;
-  car.tc = a.tc;
-  car.stability = a.stability;
-  car.steerHelp = a.steerHelp;
+/**
+ * Your car: just the car, as a real F1 car is, with nothing between your feet
+ * and the tyres. (The AI drivers' own feel for the pedals and the wheel is in
+ * CarPhysics.abs and the rest, on for them.)
+ */
+export function bareCar(car: CarPhysics): void {
+  car.abs = false;
+  car.tc = false;
+  car.stability = false;
+  car.steerHelp = false;
 }
 
 /**

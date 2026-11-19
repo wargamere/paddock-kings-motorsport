@@ -14,14 +14,9 @@ export interface Assists {
   steer: boolean;
   /** Who changes gear: the automatic (a little slower) or you. */
   gears: 'auto' | 'manual';
-  /** The car's own aids (car/physics.ts, SIM): ABS, traction control, stability control and steering help. */
-  abs: boolean;
-  tc: boolean;
-  stability: boolean;
-  steerHelp: boolean;
 }
 
-export const DEFAULT_ASSISTS: Assists = { line: 'off', brake: false, steer: false, gears: 'auto', abs: true, tc: true, stability: true, steerHelp: true };
+export const DEFAULT_ASSISTS: Assists = { line: 'off', brake: false, steer: false, gears: 'auto' };
 
 /** Player preferences, saved between visits. */
 export interface Settings {

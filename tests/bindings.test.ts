@@ -70,7 +70,10 @@ test('driving uses your keys: a rebound key drives, the old one does nothing', (
     (im as unknown as { onKey(e: Partial<KeyboardEvent>, d: boolean): void }).onKey({ code, ctrlKey: false, metaKey: false, altKey: false, repeat: false, preventDefault() {} }, down);
   const out: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   key('KeyI', true);
-  assert.equal(im.sample(out).throttle, 1);
+  // (A key presses its pedal in over a moment.)
+  assert.ok(im.sample(out).throttle > 0);
+  for (let k = 0; k < 60; k++) im.sample(out);
+  assert.equal(out.throttle, 1);
   key('KeyI', false);
   key('KeyW', true);
   assert.equal(im.sample(out).throttle, 0, 'W is not bound any more');

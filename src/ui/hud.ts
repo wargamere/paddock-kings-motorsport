@@ -68,6 +68,11 @@ export class Hud {
   private readonly pickerButtons = new Map<Compound, HTMLButtonElement>();
   private readonly tyreValue: HTMLElement;
   private lastTyres = '';
+  /** The car: its four tyres' temperatures, and the fuel aboard. */
+  private readonly carPanel: HTMLElement;
+  private readonly tyreTemps: HTMLElement[];
+  private readonly fuelValue: HTMLElement;
+  private lastCar = '';
   private readonly raceBtn: HTMLButtonElement;
   private readonly drawBtn: HTMLButtonElement;
   private career = false;
@@ -113,6 +118,14 @@ export class Hud {
     this.tyreValue = h('span', { class: 'tyre-value' });
     this.tyres = h('div', { class: 'hud-tyres', title: STR.race.tyresTitle }, this.tyreChip, h('div', { class: 'tyre-bar' }, this.tyreFill), this.tyreValue);
     this.tyres.hidden = true;
+    this.tyreTemps = [0, 1, 2, 3].map(() => h('span', { class: 'tyre-temp' }));
+    this.fuelValue = h('span', { class: 'fuel-value' });
+    this.carPanel = h(
+      'div',
+      { class: 'hud-car', title: STR.race.carTitle },
+      h('div', { class: 'tyre-temps' }, ...this.tyreTemps),
+      h('div', { class: 'hud-fuel' }, h('span', { class: 'fuel-label', text: STR.race.fuel }), this.fuelValue),
+    );
     this.picker = h('div', { class: 'tyre-picker' });
     this.picker.setAttribute('role', 'group');
     this.picker.setAttribute('aria-label', STR.race.pitPick);
@@ -136,6 +149,7 @@ export class Hud {
       h('div', { class: 'hud-gear', title: STR.race.gearTitle }, this.gearValue, this.gearMode),
       h('div', { class: 'speed-main' }, this.speedValue, this.speedUnit),
       this.revBar,
+      this.carPanel,
       this.tyres,
       this.power,
       this.damage,
@@ -226,6 +240,26 @@ export class Hud {
     }
     this.revBar.classList.toggle('shift', manual && r >= shiftLight);
     this.revBar.classList.toggle('limit', manual && r >= 0.99);
+  }
+
+  /**
+   * The car: each tyre's temperature (front left, front right, rear left, rear
+   * right, °C), coloured against the window it grips best in (blue cold, green
+   * in it, orange and red too hot), and the fuel aboard (kg; hidden at none).
+   */
+  setCar(temps: readonly number[], window: readonly [number, number], fuel: number): void {
+    const [lo, hi] = window;
+    const state = (t: number) => (t < lo - 15 ? 'cold' : t < lo ? 'cool' : t <= hi ? 'ok' : t <= hi + 12 ? 'warm' : 'hot');
+    const key = `${temps.map((t) => Math.round(t)).join(',')}|${lo}|${Math.round(fuel)}`;
+    if (key === this.lastCar) return;
+    this.lastCar = key;
+    temps.forEach((t, i) => {
+      const el = this.tyreTemps[i];
+      el.textContent = `${Math.round(t)}°`;
+      el.dataset.state = state(t);
+    });
+    this.fuelValue.parentElement!.hidden = fuel <= 0.05;
+    this.fuelValue.textContent = fmt(STR.race.fuelKg, { kg: fuel.toFixed(fuel < 10 ? 1 : 0) });
   }
 
   /**

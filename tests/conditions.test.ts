@@ -4,7 +4,7 @@ import { Window } from 'happy-dom';
 import { CarPhysics, type DriveInput } from '../src/car/physics.ts';
 import { compoundBrake, compoundGrip, compoundLife, standardGrip, tyreCurve } from '../src/car/tyres.ts';
 import { HANDLING } from '../src/config/handling.ts';
-import { CONDITIONS, TYRES, type Compound } from '../src/config/race.ts';
+import { CONDITIONS, TYRE_TEMP, TYRES, type Compound } from '../src/config/race.ts';
 import { builtInTracks, getSampleTrack } from '../src/editor/pipeline.ts';
 import { AiDriver, aiPace } from '../src/race/ai.ts';
 import { RacingDriver } from '../src/race/driver.ts';
@@ -28,8 +28,9 @@ test('tyres fade steadily, then go off: heavily slower, never blown up', () => {
   assert.ok(tyreCurve(0.5) > tyreCurve(1) && tyreCurve(1) > tyreCurve(1 + T.cliff / 2));
   assert.ok(Math.abs(tyreCurve(1 + T.cliff) - T.deadGrip) < 1e-9, 'then off the cliff');
   assert.equal(tyreCurve(50), T.deadGrip, 'and no further');
-  // Off, they never wear, and every car is on a standard set.
+  // Off, they never wear, and every car is on a standard set. (Warmed up: see the tyre temperatures test.)
   const car = new CarPhysics(getSampleTrack(0));
+  car.tyreTemp.fill(100);
   car.tyreUse = 99;
   assert.equal(car.gripScale, 1, 'tyre wear off: as new');
   assert.equal(car.tyreLeft, 1);
@@ -40,6 +41,7 @@ test('tyres fade steadily, then go off: heavily slower, never blown up', () => {
   car.wear = true;
   car.mediumLife = 5;
   car.newTyres('medium');
+  car.tyreTemp.fill(100);
   assert.equal(car.tyreLife, 5);
   car.tyreUse = 0.5;
   assert.equal(car.tyreLeft, 0.5);
@@ -47,7 +49,37 @@ test('tyres fade steadily, then go off: heavily slower, never blown up', () => {
   assert.equal(car.tyreLeft, 0);
   assert.equal(car.gripScale, T.deadGrip);
   car.newTyres();
+  car.tyreTemp.fill(100);
   assert.equal(car.gripScale, 1);
+});
+
+test('tyre temperatures: cold off the blankets, warming to their window as they work, losing grip when overheated', () => {
+  const t = getSampleTrack(0);
+  const car = new CarPhysics(t);
+  car.newTyres('medium');
+  assert.equal(car.tyreHeat, TYRE_TEMP.blanket.medium);
+  assert.ok(car.tempGrip() < 1, 'cold: less grip');
+  // Driven hard for a while, they come into their window.
+  const ai = new AiDriver(t, { name: 'a', paint: 0, difficulty: 1, laps: 3, slot: 0 });
+  ai.session.phase = 'racing';
+  ai.car.newTyres('medium');
+  const cold = ai.car.tempGrip();
+  for (let k = 0; k < 60 * HANDLING.tickRate; k++) ai.car.step(ai.drive([ai.car.state], DT));
+  const [lo, hi] = TYRE_TEMP.window.medium;
+  assert.ok(ai.car.tyreHeat > lo - 5 && ai.car.tyreHeat < hi + 5, `warmed up: ${ai.car.tyreHeat.toFixed(0)} °C`);
+  assert.ok(ai.car.tempGrip() > cold, 'and grip more');
+  // Too hot: less grip, and quicker wear.
+  car.tyreTemp.fill(hi + 20);
+  assert.ok(car.tempGrip() < 1);
+  // Sliding heats them: a car sliding sideways heats its tyres far faster than one rolling straight.
+  const slide = new CarPhysics(t);
+  const roll = new CarPhysics(t);
+  for (const c of [slide, roll]) { c.placeAt(100); c.newTyres('medium'); }
+  for (const c of [slide, roll]) Object.assign(c.state, { vx: 30 * Math.cos(c.state.heading), vz: 30 * Math.sin(c.state.heading), speed: 30 });
+  slide.state.heading += 0.25;
+  slide.step({ throttle: 0, brake: 0, steer: 0, handbrake: false });
+  roll.step({ throttle: 0, brake: 0, steer: 0, handbrake: false });
+  assert.ok(slide.tyreHeat - TYRE_TEMP.blanket.medium > 3 * (roll.tyreHeat - TYRE_TEMP.blanket.medium), `slide ${slide.tyreHeat.toFixed(2)} vs roll ${roll.tyreHeat.toFixed(2)}`);
 });
 
 test('the kinds of tyre: softs grip more and go off soonest, hards the other way, wets for the rain', () => {
