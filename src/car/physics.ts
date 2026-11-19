@@ -94,6 +94,23 @@ export class CarState {
   }
 }
 
+/**
+ * A setup's aerodynamics: its drag (× the car's), the downforce it adds, and
+ * the share of the downforce it moves onto the front tyres. From the fine
+ * wings when it has them (SETUP.fine), else the wing level.
+ */
+export function aeroOf(setup: CarSetup): { drag: number; downforce: number; front: number } {
+  const F = SETUP.fine;
+  const level = SETUP.wing[setup.wing];
+  const rear = setup.rearWing === undefined ? null : setup.rearWing - F.wingMid;
+  const front = setup.frontWing === undefined ? 0 : setup.frontWing - F.wingMid;
+  return {
+    drag: (rear === null ? level.drag : 1 + rear * F.dragPerStep) + front * F.frontDragPerStep,
+    downforce: rear === null ? level.downforce : rear * F.downforcePerStep,
+    front: front * F.balancePerStep,
+  };
+}
+
 /** The fuel (kg) a race of `laps` laps of a `length` m lap starts with (FUEL). */
 export function raceFuel(length: number, laps: number): number {
   return Math.min(FUEL.max, (FUEL.perKm * length * laps) / 1000 + FUEL.reserve);
@@ -232,6 +249,8 @@ export class CarPhysics {
    */
   abs = true;
   tc = true;
+  /** Traction control in full: it also leaves the rear tyres the grip they need for the corner (medium only stops wheelspin). */
+  tcFull = true;
   steerHelp = true;
   stability = true;
   /** The car's acceleration along itself on the last tick (m/s²), which moves its weight between the axles. */
@@ -451,7 +470,7 @@ export class CarPhysics {
     // quickly it answers the wheel, which is the surface's).
     const surfaceGrip = (a.gripFactor + b.gripFactor) / 2;
     const grip = surfaceGrip * this.gripScale * roadGrip * this.damageGrip * this.tune.grip;
-    const wing = SETUP.wing[this.setup.wing];
+    const wing = aeroOf(this.setup);
     const gears = SETUP.gears[this.setup.gears];
     const balance = SETUP.brakes[this.setup.brakes];
     const brakeDecel = H.brakeDecel * this.brakeScale * balance.bite * roadBite;
@@ -641,7 +660,12 @@ export class CarPhysics {
     const mu = (lat / G) * P.grip;
     // Along their length they grip as the brakes bite (the rain, the road, the tyres), and the ground.
     const muX = (HANDLING.maxLateralAccel / G) * P.grip * P.longGrip * bite;
-    const bias = P.brakeBias[this.setup.brakes];
+    // (Your own brake bias, if you've set one: a % either side of the standard.)
+    const bias = this.setup.brakeBias === undefined ? P.brakeBias[this.setup.brakes] : P.brakeBias.balanced + (this.setup.brakeBias - SETUP.fine.biasMid) / 100;
+    // The differential: more lock, more drive before wheelspin, and steadier under power.
+    const diff = this.setup.diff === undefined ? 0 : (this.setup.diff - SETUP.fine.diffMid) / 100;
+    // The front wing: a share of the downforce moved onto the front tyres.
+    const aeroFront = aeroOf(this.setup).front;
     const steer = st.steer;
     const cs = Math.cos(steer);
     const sn = Math.sin(steer);
@@ -664,8 +688,9 @@ export class CarPhysics {
     for (let k = 0; k < P.substeps; k++) {
       // Load on each axle, with the weight moved by the last acceleration.
       const move = clamp((this.loadAx * P.cgHeight) / L, -P.transferMax * gEff, P.transferMax * gEff);
-      const nf = gEff * P.frontWeight - move;
-      const nr = gEff * (1 - P.frontWeight) + move;
+      const shift = G * (downforce - 1) * aeroFront;
+      const nf = gEff * P.frontWeight - move + shift;
+      const nr = gEff * (1 - P.frontWeight) + move - shift;
       // (A lightly loaded tyre grips a little harder for its load, a heavily loaded one less.)
       const n0f = gEff * P.frontWeight;
       const n0r = gEff * (1 - P.frontWeight);
@@ -691,9 +716,9 @@ export class CarPhysics {
       let net = push - br;
       let spinR = false;
       // (Driving, the tyres grip about as hard as they do sideways: the engine can overpower them.)
-      const fxDriveR = fyMaxR * P.driveGrip;
+      const fxDriveR = fyMaxR * P.driveGrip * (1 + SETUP.fine.diffGrip * diff);
       const fxR0 = net > 0 ? fxDriveR : fxMaxR;
-      const tcCap = fxDriveR * P.tcMargin * Math.sqrt(Math.max(P.tcFloor, 1 - curve(alphaR) ** 2));
+      const tcCap = fxDriveR * P.tcMargin * (this.tcFull ? Math.sqrt(Math.max(P.tcFloor, 1 - curve(alphaR) ** 2)) : 1);
       if (this.tc && net > tcCap) net = tcCap;
       else if (net > fxDriveR) spinR = true;
       if (lockR && net > 0) lockR = false;
@@ -726,6 +751,8 @@ export class CarPhysics {
       const along = fxF * cs - fyF * sn + fxR;
       const across = fxF * sn + fyF * cs + fyR;
       let turn = (a * (fxF * sn + fyF * cs) - b * fyR) / P.yawInertia;
+      // (A locked differential resists the car turning under power; an open one lets it.)
+      if (diff !== 0 && fxR > 0) turn -= SETUP.fine.diffYaw * diff * Math.min(1, fxR / Math.max(1, fxDriveR)) * yaw;
       // Stability control: once the rear tyres slide further than the front ones (the tail
       // stepping out), it brakes a wheel on one side to turn the car back.
       if (this.stability) {

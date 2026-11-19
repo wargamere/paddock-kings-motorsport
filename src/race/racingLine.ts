@@ -1,5 +1,5 @@
 import { HANDLING, SIM } from '../config/handling.ts';
-import { STANDARD_CAR, type CarPerformance } from '../car/physics.ts';
+import { aeroOf, STANDARD_CAR, type CarPerformance } from '../car/physics.ts';
 import { RACING_LINE, SETUP, type CarSetup } from '../config/race.ts';
 import { kerbAt, kerbLayout } from '../track/kerbs.ts';
 import { edgeOffsets, leftOf } from '../track/spline.ts';
@@ -219,7 +219,7 @@ export interface Pace {
 
 /** A driver's pace in its actual car and setup, before road/weather/tyre adjustments. */
 export function carPace(p: Pace, setup: CarSetup, tune: Readonly<CarPerformance> = STANDARD_CAR): Pace {
-  const wing = SETUP.wing[setup.wing], gears = SETUP.gears[setup.gears];
+  const wing = aeroOf(setup), gears = SETUP.gears[setup.gears];
   const engine = { pull: tune.pull * gears.pull, top: tune.top * gears.top };
   return { ...p, ...engine, grip: p.grip * tune.grip, maxSpeed: p.maxSpeed * topSpeed(wing.drag, engine) / topSpeed(), downforce: wing.downforce, drag: wing.drag };
 }

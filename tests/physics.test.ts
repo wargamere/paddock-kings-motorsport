@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { angleDelta, CarPhysics, raceFuel, type DriveInput } from '../src/car/physics.ts';
-import { FUEL } from '../src/config/race.ts';
+import { DEFAULT_SETUP, FUEL } from '../src/config/race.ts';
+import { withFine } from '../src/core/settings.ts';
 import { HANDLING } from '../src/config/handling.ts';
 import { FixedStep } from '../src/core/fixedStep.ts';
 import type { Vec2 } from '../src/core/math.ts';
@@ -271,4 +272,48 @@ test('fuel: a full car is slower to accelerate and to stop, and the tank burns d
   assert.ok(full.fuel < 100 && full.fuel > 90, `burnt ${(100 - full.fuel).toFixed(2)} kg`);
   assert.equal(light.fuel, 0);
   assert.ok(raceFuel(2000, 5) > raceFuel(2000, 2) && raceFuel(5000, 50) === FUEL.max, 'filled for the distance, up to the most the tank holds');
+});
+
+test('the fine setup: more rear wing is slower on the straight, more front wing turns in harder at speed, brake bias decides which end locks, and the standard setup drives as the old one', () => {
+  const top = (rearWing: number) => {
+    const car = carAt();
+    car.setup = withFine({ ...DEFAULT_SETUP, rearWing });
+    for (let k = 0; k < HANDLING.tickRate * 25; k++) car.step(input(1, 0, 0));
+    return car.state.speed;
+  };
+  assert.ok(top(1) > top(11) + 1, `top speed: wing 1 ${top(1).toFixed(1)} vs 11 ${top(11).toFixed(1)} m/s`);
+  const turn = (frontWing: number) => {
+    const car = carAt();
+    car.setup = withFine({ ...DEFAULT_SETUP, frontWing });
+    car.steerHelp = false;
+    Object.assign(car.state, { vx: 45, speed: 45 });
+    let yaw = 0;
+    for (let k = 0; k < HANDLING.tickRate * 0.6; k++) {
+      car.step(input(0.4, 0, 1));
+      yaw = Math.max(yaw, car.state.yawRate);
+    }
+    return yaw;
+  };
+  assert.ok(turn(11) > turn(1), `front wing 11 turns at ${turn(11).toFixed(3)} rad/s, 1 at ${turn(1).toFixed(3)}`);
+  // Without ABS, stamped on slowly: forward bias locks the fronts, rearward the rears (both lock, but which first?).
+  const locks = (brakeBias: number) => {
+    const car = carAt();
+    car.abs = false;
+    car.setup = withFine({ ...DEFAULT_SETUP, brakeBias });
+    Object.assign(car.state, { vx: 20, speed: 20 });
+    car.step(input(0, 1, 0));
+    car.step(input(0, 1, 0));
+    return car.state.lockup;
+  };
+  assert.equal(locks(70), 1);
+  // The standard fine setup is the old car exactly.
+  const a = carAt();
+  const b = carAt();
+  b.setup = withFine(DEFAULT_SETUP);
+  for (let k = 0; k < HANDLING.tickRate * 6; k++) {
+    a.step(input(1, 0, Math.sin(k / 90) * 0.5));
+    b.step(input(1, 0, Math.sin(k / 90) * 0.5));
+  }
+  assert.equal(a.state.x, b.state.x);
+  assert.equal(a.state.yawRate, b.state.yawRate);
 });

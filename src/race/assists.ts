@@ -21,7 +21,7 @@ export function assistDriver(track: Track, wet = false, tune: Readonly<CarPerfor
   const map = wet ? wetDrivers : drivers;
   let cars = map.get(track);
   if (!cars) map.set(track, cars = new Map());
-  const key = `${tune.grip}:${tune.pull}:${tune.top}:${setup.wing}:${setup.gears}:${setup.brakes}`;
+  const key = `${tune.grip}:${tune.pull}:${tune.top}:${setup.wing}:${setup.gears}:${setup.brakes}:${setup.frontWing}:${setup.rearWing}`;
   let d = cars.get(key);
   if (!d) {
     const pace = roadPace(carPace({ grip: ASSISTS.grip, brake: ASSISTS.brake, maxSpeed: HANDLING.maxSpeed * 1.3 }, setup, tune), track);
@@ -36,15 +36,18 @@ export function assistDriver(track: Track, wet = false, tune: Readonly<CarPerfor
 const scratch: DriveInput = { throttle: 0, brake: 0, steer: 0, handbrake: false };
 
 /**
- * Your car: just the car, as a real F1 car is, with nothing between your feet
- * and the tyres. (The AI drivers' own feel for the pedals and the wheel is in
- * CarPhysics.abs and the rest, on for them.)
+ * Your car's aids as you've set them: ABS, traction control (medium: no
+ * wheelspin; full: and it keeps the rear its cornering grip and catches a
+ * slide), and with the steering assist the front tyres are never asked for
+ * more than their grip. All off is the bare car, as a real F1 car is. (The AI
+ * drivers' own feel for the pedals and the wheel is the same flags, all on.)
  */
-export function bareCar(car: CarPhysics): void {
-  car.abs = false;
-  car.tc = false;
-  car.stability = false;
-  car.steerHelp = false;
+export function carAids(car: CarPhysics, a: Assists): void {
+  car.abs = a.abs;
+  car.tc = a.tc !== 'off';
+  car.tcFull = a.tc === 'full';
+  car.stability = a.tc === 'full';
+  car.steerHelp = a.steer;
 }
 
 /**
@@ -52,8 +55,9 @@ export function bareCar(car: CarPhysics): void {
  * They help a little, they don't drive: hold the throttle and let go of the
  * rest and you'll still run wide at the first real corner.
  * Braking: where the assist driver would brake and you're not braking
- * enough, it adds a light touch (ASSISTS.brakeTouch) if you aren't braking
- * at all, or tops your braking up by at most ASSISTS.brakeTopUp if you are.
+ * enough, it adds a touch (ASSISTS.brakeLevels: its `touch`, by the level)
+ * if you aren't braking at all, or tops your braking up by at most its
+ * `topUp` if you are.
  * It never lifts the throttle. Steering: while you're not steering it eases
  * you back towards the racing line (gently, without swinging across it), but
  * never steers more than ASSISTS.steerShare of the lock, so corners are still
@@ -63,13 +67,14 @@ export function bareCar(car: CarPhysics): void {
  * on the other side of the pit wall; the limiter does the braking there).
  */
 export function applyAssists(track: Track, st: CarState, inp: DriveInput, a: Assists, wet = false, tune: Readonly<CarPerformance> = STANDARD_CAR, setup: CarSetup = DEFAULT_SETUP): DriveInput {
-  if ((!a.brake && !a.steer) || st.speed < ASSISTS.minSpeed) return inp;
+  if ((a.brake === 'off' && !a.steer) || st.speed < ASSISTS.minSpeed) return inp;
   const lane = pitLane(track);
   if (lane && onLane(lane, st.s, st.lateral)) return inp;
   const d = assistDriver(track, wet, tune, setup);
   const ai = d.drive(st, 0, scratch, { lockGuard: false });
-  if (a.brake && ai.brake > inp.brake) {
-    const help = inp.brake > 0.05 ? inp.brake + ASSISTS.brakeTopUp : ASSISTS.brakeTouch;
+  if (a.brake !== 'off' && ai.brake > inp.brake) {
+    const level = ASSISTS.brakeLevels[a.brake];
+    const help = inp.brake > 0.05 ? inp.brake + level.topUp : level.touch;
     inp.brake = Math.max(inp.brake, Math.min(ai.brake, help));
   }
   if (a.steer) {

@@ -251,6 +251,17 @@ export const CAMERA = {
     height: 1.18,
     fov: 72,
   },
+  /** The driver's eyes: just in front of the helmet, under the halo, the steering wheel and its display below. */
+  cockpit: {
+    forward: 0.26,
+    height: 0.84,
+    fov: 78,
+    /** Draws from this close (m): the halo and the steering wheel are right in front of the eyes. */
+    near: 0.06,
+    /** It looks this far ahead, and this high there (a touch down, at the road). */
+    lookAhead: 30,
+    lookHeight: 0.6,
+  },
 } as const;
 
 /**

@@ -1,4 +1,4 @@
-import { CarPhysics, NO_INPUT, raceFuel, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
+import { aeroOf, CarPhysics, NO_INPUT, raceFuel, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
 import { standardBrake, standardGrip } from '../car/tyres.ts';
 import { HANDLING, SIM } from '../config/handling.ts';
 import { AI, CONDITIONS, DAMAGE, DRS, ERS, FLAGS, PERSONALITY, PIT_LANE, SETUP, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
@@ -656,7 +656,7 @@ export class AiDriver {
   private fuelGrip(speed: number): number {
     const m = this.car.massFactor;
     if (m <= 1) return 1;
-    const df = (SIM.downforce + SETUP.wing[this.car.setup.wing].downforce) * (speed / SETUP.downforceSpeed) ** 2;
+    const df = (SIM.downforce + aeroOf(this.car.setup).downforce) * (speed / SETUP.downforceSpeed) ** 2;
     return ((1 + df / m) / (1 + df)) * (1 - SIM.loadSensitivity * (m - 1));
   }
 

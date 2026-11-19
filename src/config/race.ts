@@ -208,6 +208,16 @@ export interface CarSetup {
   wing: WingLevel;
   gears: GearSet;
   brakes: BrakeBalance;
+  /**
+   * Your own fine setup (SETUP.fine), as an F1 game has it; the AI teams go by
+   * the levels above. Each, when set, takes over from them: front wing
+   * (1–11: the aero balance), rear wing (1–11: downforce against drag),
+   * brake bias (% front) and the differential's lock on the throttle (%).
+   */
+  frontWing?: number;
+  rearWing?: number;
+  brakeBias?: number;
+  diff?: number;
 }
 export const DEFAULT_SETUP: CarSetup = { wing: 'medium', gears: 'medium', brakes: 'balanced' };
 
@@ -229,6 +239,35 @@ export const SETUP = {
     high: { drag: 1.18, downforce: 0.07 },
   },
   downforceSpeed: 40,
+  /**
+   * The fine setup (CarSetup.frontWing and the rest). Rear wing 1–11: each
+   * step from `wingMid` adds `downforcePerStep` downforce and `dragPerStep`
+   * drag (1 and 11 are the low and high wings). Front wing 1–11: each step
+   * moves `balancePerStep` of the downforce onto the front tyres (more front
+   * grip at speed: the car turns in harder, the tail gets lighter) and adds
+   * `frontDragPerStep` drag. Brake bias: each % over `biasMid` puts 1 % more
+   * of the braking on the front (steadier; the fronts lock first), under it
+   * the rear (the car rotates; the rears lock first). Differential: each %
+   * over `diffMid` of lock on the throttle gives the rear tyres `diffGrip`
+   * (per 100 %) more drive before wheelspin, and steadies the car under
+   * power (`diffYaw`: it resists turning, so it pushes wide out of a bend);
+   * less lock, the other way round.
+   */
+  fine: {
+    wingMid: 6,
+    downforcePerStep: 0.014,
+    dragPerStep: 0.036,
+    balancePerStep: 0.01,
+    frontDragPerStep: 0.004,
+    biasMid: 58,
+    biasMin: 50,
+    biasMax: 70,
+    diffMid: 75,
+    diffMin: 50,
+    diffMax: 100,
+    diffGrip: 0.4,
+    diffYaw: 1.2,
+  },
   /**
    * Gears: every gear's top speed × `ratio` (the revs and the limiter), the
    * engine's pull × `pull`, and the speed it stops pulling at × `top`. Short
@@ -366,15 +405,18 @@ export const ASSISTS = {
   /** Below this speed (m/s) the braking and steering assists leave the car alone. */
   minSpeed: 3,
   /**
-   * They help, they don't drive. Braking: never lifts your throttle; coming
-   * in too fast without braking it adds only this much brake (not enough to
-   * make the corner), and while you brake it tops you up by at most this
-   * much more. Steering: while you're not steering it makes the racing line's
+   * They help, they don't drive. Braking (at each level): never lifts your
+   * throttle; coming in too fast without braking it adds `touch` of the brake
+   * (low and medium: not enough to make the corner; high: most of it), and
+   * while you brake it tops you up by at most `topUp` more. Steering: while you're not steering it makes the racing line's
    * small corrections, but never steers more than this share of the lock
    * (less the more you steer, none at full lock).
    */
-  brakeTouch: 0.25,
-  brakeTopUp: 0.35,
+  brakeLevels: {
+    low: { touch: 0.12, topUp: 0.2 },
+    medium: { touch: 0.25, topUp: 0.35 },
+    high: { touch: 0.6, topUp: 0.7 },
+  },
   steerShare: 0.2,
   /** Steering assist's pull towards the line (steer per metre off it) and against heading away from it (steer per radian): gentle and well damped, so it settles onto the line instead of swinging across it. */
   steerPerMetre: 0.05,
