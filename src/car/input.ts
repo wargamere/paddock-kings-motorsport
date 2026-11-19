@@ -1,4 +1,4 @@
-import { INPUT } from '../config/handling.ts';
+import { HANDLING, INPUT } from '../config/handling.ts';
 import { clamp } from '../core/math.ts';
 import { settings } from '../core/settings.ts';
 import { actionMap, splitMaps, type DriveAction, type KeyBindings } from './bindings.ts';
@@ -52,6 +52,9 @@ export class InputManager {
   readonly touch: TouchState = { throttle: false, brake: false, steer: 0, shift: 0, boost: false };
   /** Gear changes asked for (keyboard and gamepad) and not yet made. */
   private shifts = 0;
+  /** The keyboard's and the touch pads' pedals, eased in (see INPUT.keyThrottleRise). */
+  private keyThrottle = 0;
+  private keyBrake = 0;
   /** The key bindings in use, and what each key does (rebuilt when they change, or the player changes). */
   private bound: KeyBindings | null = null;
   private boundFor: 'solo' | 'p1' | 'p2' = 'solo';
@@ -181,8 +184,14 @@ export class InputManager {
     const held = (a: DriveAction) => this.actionKeys(a).some((c) => this.keys.has(c));
     const t = this.touch;
     const keySteer = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
-    out.throttle = Math.max(held('throttle') ? 1 : 0, this.pad.throttle, t.throttle ? 1 : 0);
-    out.brake = Math.max(held('brake') ? 1 : 0, this.pad.brake, t.brake ? 1 : 0);
+    // A key is all or nothing: its pedal goes down over a moment, as a foot would (a gamepad's
+    // triggers are the driver's own), and comes up at once.
+    const dt = 1 / HANDLING.tickRate;
+    const ease = (now: number, down: boolean, rise: number) => (down ? Math.min(1, now + dt / rise) : 0);
+    this.keyThrottle = ease(this.keyThrottle, held('throttle') || t.throttle, INPUT.keyThrottleRise);
+    this.keyBrake = ease(this.keyBrake, held('brake') || t.brake, INPUT.keyBrakeRise);
+    out.throttle = Math.max(this.keyThrottle, this.pad.throttle);
+    out.brake = Math.max(this.keyBrake, this.pad.brake);
     out.steer = clamp(keySteer + this.pad.steer + t.steer, -1, 1);
     out.handbrake = false; // the handbrake is switched off for now
     out.boost = held('boost') || !!this.pad.boost || t.boost;

@@ -2959,6 +2959,61 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   letter-spacing: 0.06em;
 }
 
+/* The car: four tyre temperatures (laid out as the car's corners) and the fuel aboard. */
+.hud-car {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.tyre-temps {
+  display: grid;
+  grid-template-columns: repeat(2, 2.4rem);
+  gap: 0.15rem 0.9rem;
+  padding: 0.1rem 0.35rem;
+  border-left: 2px solid rgba(255, 255, 255, 0.25);
+  border-right: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.tyre-temp {
+  text-align: center;
+  border-radius: 3px;
+  padding: 0.05rem 0;
+  color: #0b0d12;
+  background: #4cc46a;
+  font-variant-numeric: tabular-nums;
+}
+
+.tyre-temp[data-state="cold"] { background: #3d7bd9; color: #fff; }
+.tyre-temp[data-state="cool"] { background: #7fb6f0; }
+.tyre-temp[data-state="warm"] { background: #f2a33a; }
+.tyre-temp[data-state="hot"] { background: #e8453c; color: #fff; }
+
+.hud-fuel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  line-height: 1.1;
+}
+
+.hud-fuel[hidden] {
+  display: none;
+}
+
+.fuel-label {
+  opacity: 0.7;
+}
+
+.fuel-value {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .hud-tyres[hidden] {
   display: none;
 }

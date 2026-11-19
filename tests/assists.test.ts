@@ -76,7 +76,7 @@ test('stuck in 1st with manual gears, the limiter holds the car to 1st gear spee
 
 test('the AI changes gear without losing anything: medal times are what they were before gears', () => {
   // Measured before the gearbox existed (seconds), with the full car model (SIM) since.
-  const before = [34.03, 33.87, 32.88];
+  const before = [34.03, 33.88, 32.91];
   for (let i = 0; i < 3; i++) {
     const t = getSampleTrack(i);
     const lap = new AuthorLap(t).finish();

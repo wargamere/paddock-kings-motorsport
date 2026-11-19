@@ -290,14 +290,66 @@ export const TYRES = {
    * until a little over half; in the dry they overheat and wear fast.
    */
   compounds: {
-    soft: { grip: 1.05, rainGrip: 0.63, rainBrake: 0.65, life: 0.65, rainLife: 0.65 },
-    medium: { grip: 1, rainGrip: 0.6, rainBrake: 0.65, life: 1, rainLife: 1 },
-    hard: { grip: 0.95, rainGrip: 0.57, rainBrake: 0.65, life: 1.6, rainLife: 1.6 },
+    soft: { grip: 1.05, rainGrip: 0.65, rainBrake: 0.65, life: 0.65, rainLife: 0.65 },
+    medium: { grip: 1, rainGrip: 0.62, rainBrake: 0.65, life: 1, rainLife: 1 },
+    hard: { grip: 0.95, rainGrip: 0.59, rainBrake: 0.65, life: 1.6, rainLife: 1.6 },
     inter: { grip: 0.9, damp: 0.93, rainGrip: 0.78, rainBrake: 0.8, life: 0.45, rainLife: 1.1 },
     wet: { grip: 0.86, rainGrip: 0.95, rainBrake: 0.9, life: 0.4, rainLife: 1.3 },
   } as Record<Compound, { grip: number; damp?: number; rainGrip: number; rainBrake: number; life: number; rainLife: number }>,
   /** Quickest first (in the dry). */
   order: ['soft', 'medium', 'hard', 'inter', 'wet'] as readonly Compound[],
+} as const;
+
+/**
+ * Tyre temperatures (car/physics.ts, each of the four tyres, °C). A tyre
+ * heats from the work it does: the power of its sliding (its sideways force
+ * × how fast it slips sideways, and the same along it, braking and driving:
+ * a lock-up or wheelspin heats it hard), × `heat` (°C a second per W/kg), and
+ * from flexing, `roll` × the speed. The air cools it, `cool` × how much hotter
+ * it is than the air, more the faster it goes (× 1 + speed / `coolSpeed`) and
+ * on a wet road (× 1 + `wetCool` × wetness). In a bend the outside tyres do
+ * more of the work (up to `outside` more of the axle's share).
+ *
+ * Each compound grips best in its window (°C, `window`): below it the tyre
+ * loses `cold` of its grip per °C (to no less than `coldFloor`), above it
+ * `hot` per °C (to no less than `hotFloor`), and wears faster, by `hotWear`
+ * per 10 °C over. Sets go on at `blanket` °C (the tyre blankets; wets and
+ * intermediates aren't heated as much); the air is `air` °C in the dry and
+ * `wetAir` in the rain.
+ */
+export const TYRE_TEMP = {
+  heat: 0.25,
+  roll: 0.05,
+  cool: 0.016,
+  coolSpeed: 30,
+  wetCool: 0.4,
+  outside: 0.3,
+  cold: 0.006,
+  coldFloor: 0.78,
+  hot: 0.008,
+  hotFloor: 0.8,
+  hotWear: 0.4,
+  air: 26,
+  wetAir: 16,
+  blanket: { soft: 80, medium: 80, hard: 80, inter: 60, wet: 50 } as Record<Compound, number>,
+  window: { soft: [85, 105], medium: [90, 112], hard: [95, 120], inter: [55, 85], wet: [45, 75] } as Record<Compound, readonly [number, number]>,
+} as const;
+
+/**
+ * Fuel (car/physics.ts CarPhysics.fuel): a race starts with enough aboard for
+ * its distance (`perKm` kg a kilometre, burnt at `idle` of the rate off the
+ * throttle, plus `reserve` kg), at most `max` kg. The car weighs `carMass` kg
+ * empty: the engine, brakes and air push the extra weight too, and its
+ * downforce is a smaller share of it, so a full car is slower and burns off
+ * to be quicker lap by lap. (Game-sized: races here are short, so the tank is
+ * scaled up to weigh as much as a real one does at the start.)
+ */
+export const FUEL = {
+  carMass: 800,
+  perKm: 6,
+  idle: 0.3,
+  reserve: 3,
+  max: 110,
 } as const;
 
 /** AI opponents (race mode only). */
@@ -321,7 +373,7 @@ export const ASSISTS = {
    * small corrections, but never steers more than this share of the lock
    * (less the more you steer, none at full lock).
    */
-  brakeTouch: 0.18,
+  brakeTouch: 0.25,
   brakeTopUp: 0.35,
   steerShare: 0.2,
   /** Steering assist's pull towards the line (steer per metre off it) and against heading away from it (steer per radian): gentle and well damped, so it settles onto the line instead of swinging across it. */

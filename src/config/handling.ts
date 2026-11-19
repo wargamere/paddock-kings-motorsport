@@ -174,17 +174,17 @@ export const HANDLING = {
  *   against its share of the load).
  * - `yawInertia`: how hard the car is to turn (m², its yaw inertia / mass).
  *
- * Assists (on for the AI, the player's choice):
- * - ABS keeps the brakes at `absMargin` of locking, and eases them on tyres
- *   busy cornering as traction control does the drive (so the car still
- *   steers, and doesn't spin, braking into a bend): the front's to no less
- *   than `absSteerFloor` (squared) of their bite.
- * - Traction control keeps the drive at `tcMargin` of wheelspin, and leaves
- *   the rear tyres the grip they need for the corner (at least `tcFloor` of
- *   their pull, squared).
- * - Steering help keeps the front tyres within `steerHelp` × their peak slip
- *   (and so counter-steers a sliding car for you).
- * - Stability control: once the rear tyres slip more than the front ones (and
+ * The AI drivers' feel for the pedals and the wheel (your car has none of it:
+ * no driver aids, as in a real F1 car):
+ * - Braking: right at the point of locking (`absMargin` of it), and easing
+ *   off for tyres busy cornering (the front's to no less than `absSteerFloor`,
+ *   squared, of their bite), so the car still turns, and doesn't spin, braking
+ *   into a bend.
+ * - Throttle: `tcMargin` short of wheelspin, leaving the rear tyres the grip
+ *   they need for the corner (at least `tcFloor` of their pull, squared).
+ * - Wheel: never asking the front tyres for more than `steerHelp` × their
+ *   peak slip (so it counter-steers a slide).
+ * - Catching the tail: once the rear tyres slip more than the front ones (and
  *   more than `escFrom` of their peak), it turns the car back, `escGain` ×
  *   the excess (rad) × the load (m/s²) in yaw acceleration, at most `escMax`
  *   × the load.
@@ -227,6 +227,9 @@ export const INPUT = {
   /** Gamepad stick dead zone (the rest of the range is rescaled to 0..1). */
   stickDeadZone: 0.15,
   triggerDeadZone: 0.05,
+  /** A key (or touch pad) presses its pedal all the way down over this long (s): no car has an on/off throttle. */
+  keyThrottleRise: 0.3,
+  keyBrakeRise: 0.12,
 } as const;
 
 export const CAMERA = {

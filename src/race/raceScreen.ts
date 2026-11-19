@@ -7,10 +7,10 @@ import { keyboardHint, keyLabel, keysText } from '../car/bindings.ts';
 import { connectedPads, InputManager, type InputAction } from '../car/input.ts';
 import { CarModel } from '../car/model.ts';
 import { currentPaintHex, recordFinishedRun } from '../car/paint.ts';
-import { CarPhysics, CarState, lerpState, NO_INPUT, STANDARD_CAR, type DriveInput } from '../car/physics.ts';
+import { CarPhysics, CarState, lerpState, NO_INPUT, raceFuel, STANDARD_CAR, type DriveInput } from '../car/physics.ts';
 import { HANDLING } from '../config/handling.ts';
 import { AI_PAINTS, PAINTS } from '../config/paint.ts';
-import { AI, CONDITIONS, DAMAGE, DRS, ENGINEER, GRAPHICS, PIT_LANE, RACE, SLIPSTREAM, TYRES, type Compound } from '../config/race.ts';
+import { AI, CONDITIONS, DAMAGE, DRS, ENGINEER, GRAPHICS, PIT_LANE, RACE, SLIPSTREAM, TYRE_TEMP, TYRES, type Compound } from '../config/race.ts';
 import { compoundLife } from '../car/tyres.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { FixedStep } from '../core/fixedStep.ts';
@@ -47,7 +47,7 @@ import { raceOrder } from './classify.ts';
 import { RaceControl, type ControlCar, type ControlEvent } from './raceControl.ts';
 import { sampleAt, leftOf } from '../track/spline.ts';
 import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
-import { applyAssists, assistDriver, carAids } from './assists.ts';
+import { applyAssists, assistDriver, bareCar } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
 import { bandFor, compoundsMet, pickCompound, pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
@@ -652,8 +652,9 @@ export class RaceScreen implements Screen {
   }
 
   /** The player's car for a new run: the weather, and new tyres (worn as it goes with tyre wear on). */
-  private prepareCar(car: CarPhysics, wear: boolean, damage = false): void {
+  private prepareCar(car: CarPhysics, wear: boolean, damage = false, fuel = 0): void {
     car.wet = this.wet;
+    car.fuel = fuel;
     car.wear = wear;
     car.damageOn = damage;
     car.repair();
@@ -702,7 +703,8 @@ export class RaceScreen implements Screen {
       car.placeAt(-8);
       this.playerStart = -8;
     }
-    this.prepareCar(car, setup.tyreWear, setup.damage);
+    // (A race starts with the tank filled for its distance; practice runs light.)
+    this.prepareCar(car, setup.tyreWear, setup.damage, setup.mode === 'race' ? raceFuel(t.center.length, setup.laps) : 0);
     this.control = setup.mode === 'race' ? new RaceControl(t.center.length, setup.laps, setup.safetyCar) : null;
     // DRS and the boost: in a race with AI cars. (Every car starts with a full battery.)
     this.drs = setup.mode === 'race' && this.opponents.length ? new DrsControl(t, 1 + this.opponents.length) : null;
@@ -781,7 +783,7 @@ export class RaceScreen implements Screen {
     const ai = o.ai, car = ai.car, s = ai.session, st = car.state;
     if (!s.canDrive || s.retired) return NO_INPUT;
     if (s.phase === 'finished') return BRAKE;
-    carAids(car, settings().assists);
+    bareCar(car);
     let inp = applyAssists(this.game.track, st, this.input2.sample(this.p2Input), settings().assists, this.wet, car.tune, car.setup);
     inp.boost = this.p2Input.boost;
     if (Number.isFinite(ai.raceCap) && st.speed > ai.raceCap) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, st.speed > ai.raceCap + 3 ? 0.4 : 0) };
@@ -1020,7 +1022,7 @@ export class RaceScreen implements Screen {
       // Each AI driver's character (the same every race); player 2 has none: they drive themselves.
       const human = this.twoPlayers && k === field.length - 1;
       const personality = human ? undefined : personalityFor(f.id ?? f.name);
-      const ai = new AiDriver(t, { name: f.name, paint: f.paint, difficulty: f.difficulty, tune: f.tune, laps, slot: order.indexOf(k), box: f.box ?? k + 1, wet: this.wet, tyreWear: this.game.setup.tyreWear, damage: this.game.setup.damage, mediumLife: this.game.event?.tyreLife, twoCompounds: this.twoCompounds, ers: this.game.setup.mode === 'race', personality });
+      const ai = new AiDriver(t, { name: f.name, paint: f.paint, difficulty: f.difficulty, tune: f.tune, laps, slot: order.indexOf(k), box: f.box ?? k + 1, wet: this.wet, tyreWear: this.game.setup.tyreWear, damage: this.game.setup.damage, mediumLife: this.game.event?.tyreLife, twoCompounds: this.twoCompounds, ers: this.game.setup.mode === 'race', fuel: this.game.setup.mode === 'race', personality });
       ai.onMistake = (kind) => this.onMistake(k + 1, kind);
       const model = this.aiModels[k];
       model.setPaint(f.paint, f.secondary);
@@ -1211,7 +1213,9 @@ export class RaceScreen implements Screen {
     if ((session.phase === 'racing' || this.watching) && this.weather.kind === 'changing') this.updateWeather(dt);
     const assists = settings().assists;
     car.gearbox = assists.gears;
-    carAids(car, assists);
+    // (Your car has no driver aids; the autopilot, an AI, drives with an AI's feel for the pedals.)
+    if (this.autopilot) car.abs = car.tc = car.stability = car.steerHelp = true;
+    else bareCar(car);
     let inp = session.phase === 'racing' ? this.input.sample(this.tickInput) : session.phase === 'finished' ? BRAKE : NO_INPUT;
     if (session.phase === 'racing') inp = applyAssists(this.game.track, car.state, this.tickInput, assists, this.wet, car.tune, car.setup);
     if (this.autopilot && session.phase === 'racing') inp = this.autopilot.drive(car.state);
@@ -2169,6 +2173,7 @@ export class RaceScreen implements Screen {
     }
     this.radio.tick(dt);
     this.hud.setTyres(car.wear ? car.compound : null, car.tyreLeft, this.crew?.service ?? 0);
+    this.hud.setCar(car.tyreTemp, TYRE_TEMP.window[car.compound], car.fuel);
     this.updateHud(alpha);
     this.hud.tick(dt);
     this.hud2.tick(dt);

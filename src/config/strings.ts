@@ -260,18 +260,6 @@ export const STR = {
     summarySteer: 'steering',
     summaryAuto: 'automatic gears',
     summaryManual: 'manual gears',
-    /** The car's own aids (in the summary: how many are off). */
-    car: 'Car aids',
-    carIntro: 'What a real race car can have fitted. Turn them off for the full challenge: the brakes can lock, the rear can spin up and step out, and the front can push wide if you ask too much of it.',
-    abs: 'ABS',
-    absHint: 'The brakes never lock, and ease off on tyres busy cornering, so you can still steer while braking.',
-    tc: 'Traction control',
-    tcHint: 'The rear wheels never spin up, and keep the grip they need for the corner, so the throttle can’t spin you.',
-    stability: 'Stability control',
-    stabilityHint: 'Catches the rear stepping out before it becomes a spin.',
-    steerHelp: 'Steering help',
-    steerHelpHint: 'Turns the front wheels only as far as the tyres can use (best with a keyboard), and so catches a slide for you.',
-    summaryAidsOff: '{n} car aids off',
   },
 
   /** Race conditions, chosen in the race setup (race/pitStop.ts, config/race.ts CONDITIONS). */
@@ -1055,6 +1043,9 @@ export const STR = {
     ghostUser: '{name} · best',
     /** Tyre wear and pit stops. */
     tyresTitle: 'Your tyres and how much of their life is left',
+    carTitle: 'Your tyres’ temperatures (blue: cold, green: in their window, red: overheating) and the fuel aboard',
+    fuel: 'FUEL',
+    fuelKg: '{kg} kg',
     tyresWorn: 'Tyres going off soon: pit in the next lap or two',
     tyresGone: 'Tyres have gone off! Pit now',
     pitIn: 'Pit stop: choose your tyres (1–5)',

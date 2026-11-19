@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { angleDelta, CarPhysics, type DriveInput } from '../src/car/physics.ts';
+import { angleDelta, CarPhysics, raceFuel, type DriveInput } from '../src/car/physics.ts';
+import { FUEL } from '../src/config/race.ts';
 import { HANDLING } from '../src/config/handling.ts';
 import { FixedStep } from '../src/core/fixedStep.ts';
 import type { Vec2 } from '../src/core/math.ts';
@@ -255,4 +256,19 @@ test('the full car model: it brakes harder at speed (downforce), and at the limi
   const kinematic = (35 * Math.tan(car.state.steer)) / HANDLING.wheelBase;
   assert.ok(maxYaw < kinematic, `understeers: yaw ${maxYaw.toFixed(2)} rad/s vs ${kinematic.toFixed(2)} the wheels point to`);
   assert.ok(maxYaw < 1.5, 'and no spin');
+});
+
+test('fuel: a full car is slower to accelerate and to stop, and the tank burns down as it goes', () => {
+  const run = (fuel: number) => {
+    const car = carAt();
+    car.fuel = fuel;
+    for (let k = 0; k < HANDLING.tickRate * 6; k++) car.step(input(1, 0, 0));
+    return car;
+  };
+  const light = run(0);
+  const full = run(100);
+  assert.ok(full.state.speed < light.state.speed - 1, `${full.state.speed.toFixed(1)} m/s full vs ${light.state.speed.toFixed(1)} empty after 6 s`);
+  assert.ok(full.fuel < 100 && full.fuel > 90, `burnt ${(100 - full.fuel).toFixed(2)} kg`);
+  assert.equal(light.fuel, 0);
+  assert.ok(raceFuel(2000, 5) > raceFuel(2000, 2) && raceFuel(5000, 50) === FUEL.max, 'filled for the distance, up to the most the tank holds');
 });

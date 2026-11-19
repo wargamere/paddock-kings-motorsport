@@ -1,7 +1,7 @@
-import { CarPhysics, NO_INPUT, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
+import { CarPhysics, NO_INPUT, raceFuel, STANDARD_CAR, type CarPerformance, type CarState, type DriveInput } from '../car/physics.ts';
 import { standardBrake, standardGrip } from '../car/tyres.ts';
-import { HANDLING } from '../config/handling.ts';
-import { AI, CONDITIONS, DAMAGE, DRS, ERS, FLAGS, PERSONALITY, PIT_LANE, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
+import { HANDLING, SIM } from '../config/handling.ts';
+import { AI, CONDITIONS, DAMAGE, DRS, ERS, FLAGS, PERSONALITY, PIT_LANE, SETUP, TRAFFIC, WEATHER, type Compound } from '../config/race.ts';
 import { hashString, rng } from '../core/random.ts';
 import type { MistakeKind, Personality } from './personality.ts';
 import { clamp, wrap } from '../core/math.ts';
@@ -226,7 +226,7 @@ export class AiDriver {
    * `slot`: its place on the grid; `box`: whose pit box it uses (see pitBox:
    * 0 is yours; by default slot + 1).
    */
-  constructor(track: Track, opts: { name: string; paint: number; difficulty: number; laps: number; slot: number; box?: number; wet?: boolean; tyreWear?: boolean; damage?: boolean; mediumLife?: number; tune?: Readonly<CarPerformance>; twoCompounds?: boolean; ers?: boolean; personality?: Personality }) {
+  constructor(track: Track, opts: { name: string; paint: number; difficulty: number; laps: number; slot: number; box?: number; wet?: boolean; tyreWear?: boolean; damage?: boolean; mediumLife?: number; tune?: Readonly<CarPerformance>; twoCompounds?: boolean; ers?: boolean; fuel?: boolean; personality?: Personality }) {
     const wet = !!opts.wet;
     this.name = opts.name;
     this.paint = opts.paint;
@@ -263,6 +263,8 @@ export class AiDriver {
       // The quickest tyres that last the race, else its own choice.
       this.car.newTyres(pickCompound(opts.laps, this.car.mediumLife, wet ? 1 : 0, this.preference), true);
     }
+    // A race: the tank filled for its distance (FUEL).
+    if (opts.fuel) this.car.fuel = raceFuel(track.center.length, opts.laps);
     aiCars.set(this.car.state, opts.difficulty);
     const g = gridPlace(track, opts.slot);
     this.start = g.s;
@@ -573,7 +575,7 @@ export class AiDriver {
       this.lane = st.lateral - this.driver.lateralAt(st.s);
       this.laneVel = 0;
     }
-    const inp = this.driver.drive(st, this.lane, this.inp, { pace, cap, tow: this.car.draft, keep, late: this.planner.fighting || (!!p && p.style >= PERSONALITY.traitFrom && near.ahead < PERSONALITY.lateWithin), route, offRoad: !!pit?.offRoad, grip: (this.car.gripScale * this.car.damageGrip) / standardGrip(this.planWetness), brake: this.car.brakeScale / standardBrake(this.planWetness), extraTop: (this.car.drs ? DRS.top : 0) + (this.car.boosting ? ERS.top : 0) });
+    const inp = this.driver.drive(st, this.lane, this.inp, { pace, cap, tow: this.car.draft, keep, late: this.planner.fighting || (!!p && p.style >= PERSONALITY.traitFrom && near.ahead < PERSONALITY.lateWithin), route, offRoad: !!pit?.offRoad, grip: (this.car.gripScale * this.car.damageGrip * this.fuelGrip(st.speed)) / standardGrip(this.planWetness), brake: this.car.brakeScale / standardBrake(this.planWetness) / this.car.massFactor, extraTop: (this.car.drs ? DRS.top : 0) + (this.car.boosting ? ERS.top : 0) });
     // Sliding (knocked, or ran wide): easing off the throttle until it gathers itself. No braking,
     // which would only surprise the car behind. (Being off its path is already taken care of:
     // the speed then comes from the path it's really on.)
@@ -644,6 +646,18 @@ export class AiDriver {
       else behind = Math.min(behind, -ds);
     }
     return { ahead, behind };
+  }
+
+  /**
+   * The grip it has with the fuel aboard at `speed` (m/s), against an empty
+   * tank: the downforce is a smaller share of a heavier car's weight, and the
+   * more heavily loaded tyres grip a little less for their load.
+   */
+  private fuelGrip(speed: number): number {
+    const m = this.car.massFactor;
+    if (m <= 1) return 1;
+    const df = (SIM.downforce + SETUP.wing[this.car.setup.wing].downforce) * (speed / SETUP.downforceSpeed) ** 2;
+    return ((1 + df / m) / (1 + df)) * (1 - SIM.loadSensitivity * (m - 1));
   }
 
   /**
