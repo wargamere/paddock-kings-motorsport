@@ -19,11 +19,13 @@
     "preview:cg": "vite preview --outDir dist/crazygames",
     "test:browser": "node scripts/browserCheck.mjs",
     "test:career:browser": "node scripts/longCareerBrowserCheck.mjs",
+    "test:physics:browser": "node scripts/physicsBrowserCheck.mjs",
     "baseline:ai": "node training/baseline.ts",
     "train:ai": "node training/train.ts",
     "eval:ai": "node training/evaluate.ts",
     "bench:ai": "node training/bench.ts",
     "bench:race": "node scripts/racePerformanceCheck.mjs",
+    "bench:physics": "node scripts/physicsBenchmark.ts",
     "bench:wet-race": "node scripts/wetRaceCheck.mjs",
     "test:ai:browser": "node scripts/aiBrowserCheck.mjs",
     "eval:racecraft": "node scripts/racecraftCheck.ts"

@@ -357,6 +357,9 @@ export const TYRES = {
  * `wetAir` in the rain.
  */
 export const TYRE_TEMP = {
+  coreExchange: 0.025,
+  coreRate: 0.2,
+  coreCool: 0.001,
   heat: 0.25,
   roll: 0.05,
   cool: 0.016,

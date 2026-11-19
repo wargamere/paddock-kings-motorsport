@@ -74,13 +74,13 @@ test('stuck in 1st with manual gears, the limiter holds the car to 1st gear spee
   assert.ok(car.state.speed <= G.top[0] + 0.3, `${car.state.speed.toFixed(1)} m/s`);
 });
 
-test('the AI changes gear without losing anything: medal times are what they were before gears', () => {
-  // Measured before the gearbox existed (seconds), with the full car model (SIM) since.
-  const before = [34.03, 33.88, 32.91];
+test('the AI gearbox and current physics reproduce the pinned medal targets', () => {
+  // Author version 8: four contact patches, progressive slip and rear engine braking.
+  const targets = [34.02, 33.93, 33.05];
   for (let i = 0; i < 3; i++) {
     const t = getSampleTrack(i);
     const lap = new AuthorLap(t).finish();
-    assert.ok(lap !== null && Math.abs(lap - before[i]) < 0.02, `${t.def.name}: ${lap?.toFixed(2)} s`);
+    assert.ok(lap !== null && Math.abs(lap - targets[i]) < 0.02, `${t.def.name}: ${lap?.toFixed(2)} s`);
   }
 });
 

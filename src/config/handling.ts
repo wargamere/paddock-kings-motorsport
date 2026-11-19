@@ -141,8 +141,8 @@ export const HANDLING = {
 } as const;
 
 /**
- * The car as a real one (car/physics.ts), above walking pace: two axles, each
- * with its own grip, load and slip angle, so it understeers, oversteers, spins,
+ * The planar car model (car/dynamics.ts), above walking pace: four contact patches,
+ * each with its own grip, load and transient slip, so it understeers, oversteers, spins,
  * locks its brakes and spins its wheels as a race car does.
  *
  * - Load: `frontWeight` of the weight on the front wheels at rest. Braking moves
@@ -170,8 +170,8 @@ export const HANDLING = {
  * - Brakes: at full pedal they ask `brakePower` × HANDLING.brakeDecel, which
  *   the tyres can take only at speed, with the downforce on them: slower, they
  *   lock (or ABS holds them at the tyres' limit). They lock the front first
- *   with the brake balance forward, the rear first with it back (`brakeBias`: the front's share of the braking
- *   against its share of the load).
+ *   with the brake balance forward, the rear first with it back. Fine brakeBias is
+ *   the actual front percentage; legacy brakeBias values offset SETUP.fine.biasMid.
  * - `yawInertia`: how hard the car is to turn (m², its yaw inertia / mass).
  *
  * The AI drivers' feel for the pedals and the wheel (your car has none of it:
@@ -221,6 +221,17 @@ export const SIM = {
   blendFrom: 3,
   blendTo: 6,
   substeps: 2,
+  /** Suspension transfer settles over time; roll stiffness apportions it between the axles. */
+  suspensionHz: 3.5,
+  suspensionDamping: 0.95,
+  rollFront: 0.53,
+  /** Distance travelled before a tyre's lateral force builds (m), and minimum response time (s). */
+  relaxationLength: 0.22,
+  relaxationMin: 0.006,
+  /** Progressive longitudinal breakaway and recovery (s), and peak slip ratio. */
+  slipBuild: 0.075,
+  slipRecover: 0.045,
+  peakLongSlip: 0.12,
 } as const;
 
 export const INPUT = {

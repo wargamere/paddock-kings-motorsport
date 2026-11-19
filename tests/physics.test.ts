@@ -210,9 +210,9 @@ test('the full car model: brakes lock without ABS, the rear spins up without tra
     return locked;
   };
   // Slowly, a stamp on the brakes locks them; at speed the downforce holds them.
-  assert.equal(brakeFrom(20, false), 1, 'locks without ABS');
+  assert.ok(brakeFrom(20, false) > .5, 'progressive lockup without ABS');
   assert.equal(brakeFrom(20, true), 0, 'not with ABS');
-  assert.equal(brakeFrom(55, false), 0, 'at speed the tyres can take it');
+  assert.ok(brakeFrom(55, false) < .05, 'downforce prevents substantial locking at speed');
   // Flooring it out of a slow bend: without traction control the rear spins up and steps out.
   const exit = (tc: boolean) => {
     const car = carAt();
@@ -231,7 +231,7 @@ test('the full car model: brakes lock without ABS, the rear spins up without tra
   };
   const raw = exit(false);
   const aided = exit(true);
-  assert.equal(raw.spin, 1, 'wheelspin without traction control');
+  assert.ok(raw.spin > .1, 'progressive wheelspin without traction control');
   assert.equal(aided.spin, 0, 'none with it');
   assert.ok(raw.slip > aided.slip * 2, `the rear steps out: sliding ${raw.slip.toFixed(1)} m/s vs ${aided.slip.toFixed(1)}`);
 });
@@ -305,7 +305,7 @@ test('the fine setup: more rear wing is slower on the straight, more front wing 
     car.step(input(0, 1, 0));
     return car.state.lockup;
   };
-  assert.equal(locks(70), 1);
+  assert.ok(locks(70) > .1, 'forward bias builds front slip');
   // The standard fine setup is the old car exactly.
   const a = carAt();
   const b = carAt();
