@@ -53,6 +53,9 @@ export class ContactPatch {
     }
     // A spinning rear tyre gradually sheds its ability to corner. Recovery is progressive too.
     if (ask > 0) y *= 1 - 0.8 * smooth(over / 0.65);
+    // Slip memory reserves cornering grip, but without a wheel-inertia energy store it
+    // cannot supply additional drive or braking force after a partial pedal release.
+    x = clamp(x, -Math.abs(ask), Math.abs(ask));
     const usage = Math.hypot(x / capX, y / capY);
     const scale = usage > 1 ? 1 / usage : 1;
     this.fx = x * scale; this.fy = y * scale; this.usage = Math.min(1, usage);

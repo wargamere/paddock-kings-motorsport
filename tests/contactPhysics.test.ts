@@ -13,10 +13,12 @@ test('contact forces stay inside the friction ellipse throughout combined-slip b
   for (const alpha of [-1,-.2,-.05,0,.05,.2,1]) for (const demand of [-50,-5,0,5,50]) {
     patch.reset();
     for (let tick=0;tick<120;tick++) {
-      patch.solve(alpha,30,tick<60?demand:0,10,8,1/240,false,false,false,false);
+      const request=tick<60?demand:Math.sign(demand)*.1;
+      patch.solve(alpha,30,request,10,8,1/240,false,false,false,false);
       assert.ok(Number.isFinite(patch.fx+patch.fy+patch.work+patch.slipRatio));
       assert.ok(Math.hypot(patch.fx/10,patch.fy/8)<=1+1e-12);
       assert.ok(patch.work>=0);
+      assert.ok(Math.abs(patch.fx)<=Math.abs(request)+1e-12,'recovering slip cannot invent extra drive or brake force after a partial release');
     }
   }
 });
