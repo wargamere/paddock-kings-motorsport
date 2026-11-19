@@ -210,7 +210,7 @@ test('a full field all in on the same lap, on a track with 4 boxes: everyone sto
 test('the driving assists leave you alone in the pit lane', () => {
   const t = getSampleTrack(0);
   const lane = pitLane(t)!;
-  const on: Assists = { ...DEFAULT_ASSISTS, brake: true, steer: true, gears: 'auto', line: 'off' };
+  const on: Assists = { ...DEFAULT_ASSISTS, brake: 'medium', steer: true, gears: 'auto', line: 'off' };
   const car = new CarPhysics(t);
   const st = car.state;
   // Beside the garages, rolling along not steering: no tug back towards the line (or the wall).

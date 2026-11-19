@@ -208,6 +208,9 @@ export class CarModel {
   readonly root = new Group();
   readonly kind: CarKind;
   private readonly body = new Group();
+  /** The formula car's steering wheel (it turns with the wheels) and its display (see setDash). */
+  private readonly steeringWheel: Group | null = null;
+  private dash: { canvas: HTMLCanvasElement; texture: CanvasTexture; key: string } | null = null;
   private readonly paint: MeshPhysicalMaterial;
   private readonly accent: Mesh;
   private readonly lampMat: MeshBasicMaterial;
@@ -253,6 +256,18 @@ export class CarModel {
     this.glow.renderOrder = 3;
     this.trim = new Mesh(this.trimFor(this.look), trimMat);
     this.body.add(new Mesh(formula ? formulaPaint() : paintGeometry(), this.paint), this.accent, this.trim, new Mesh(formula ? formulaLamps() : lampGeometry(), this.lampMat), this.glow);
+    if (formula && !ghost) {
+      // The steering wheel, in front of the driver, leaning back towards them.
+      const wheel = new Group();
+      wheel.position.set(0, 0.68, 0.56);
+      wheel.rotation.x = 0.5;
+      const grip = new Mesh(new BoxGeometry(0.27, 0.12, 0.035), trimMat);
+      const left = new Mesh(new BoxGeometry(0.045, 0.15, 0.05).translate(0.14, -0.01, 0), trimMat);
+      const right = new Mesh(new BoxGeometry(0.045, 0.15, 0.05).translate(-0.14, -0.01, 0), trimMat);
+      wheel.add(grip, left, right);
+      this.body.add(wheel);
+      this.steeringWheel = wheel;
+    }
     // Sharing this material with the non-instanced trim makes the renderer
     // switch shader variants twice per car, every frame (especially costly at night).
     const tyreMat = trimMat.clone();
@@ -356,6 +371,58 @@ export class CarModel {
     this.body.rotation.set(this.pitch, 0, this.roll);
 
     this.placeWheels(st.steer, st.spin);
+    // The steering wheel turns about four times as far as the front wheels (+ steer is right:
+    // seen from the seat, the wheel turns clockwise).
+    if (this.steeringWheel) this.steeringWheel.rotation.z = st.steer * 4;
+  }
+
+  /**
+   * The steering wheel's display (the player's car, in the cockpit): the
+   * gear, the speed in `unit`, and a row of rev lights (green, red, blue, as
+   * the revs climb, all flashing blue at `shift` of the limit: change up).
+   * Drawn only when something on it has changed.
+   */
+  setDash(gear: number, speed: number, rpm: number, shift: number, unit: string, factor: number): void {
+    const wheel = this.steeringWheel;
+    if (!wheel) return;
+    if (!this.dash) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 128;
+      const texture = new CanvasTexture(canvas);
+      const screen = new Mesh(new PlaneGeometry(0.15, 0.075).rotateY(Math.PI).translate(0, 0.005, -0.019), new MeshBasicMaterial({ map: texture }));
+      wheel.add(screen);
+      this.dash = { canvas, texture, key: '' };
+    }
+    const lights = Math.max(0, Math.min(10, Math.round(((rpm - 0.6) / (shift - 0.6)) * 10)));
+    const flash = rpm >= shift;
+    const shown = Math.round(Math.abs(speed) * factor);
+    const key = `${gear}|${shown}|${lights}|${flash}`;
+    if (key === this.dash.key) return;
+    this.dash.key = key;
+    const ctx = this.dash.canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = '#05070a';
+    ctx.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 10; i++) {
+      const on = flash || i < lights;
+      ctx.fillStyle = !on ? '#1b2027' : flash ? '#4aa8ff' : i < 4 ? '#3ddc5a' : i < 7 ? '#ff4a3d' : '#4aa8ff';
+      ctx.beginPath();
+      ctx.arc(22 + i * 23.5, 16, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 72px sans-serif';
+    ctx.fillText(gear <= 0 ? 'R' : String(gear), 128, 78);
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(shown), 14, 78);
+    ctx.font = '16px sans-serif';
+    ctx.fillStyle = '#9aa6b5';
+    ctx.fillText(unit, 14, 104);
+    this.dash.texture.needsUpdate = true;
   }
 
   private placeWheels(steerAngle: number, spin: number): void {

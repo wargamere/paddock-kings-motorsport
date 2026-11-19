@@ -61,7 +61,7 @@ src/
               bindings.ts (keyboard keys),
               contact.ts (car-to-car bumps), slipstream.ts (drafting), input.ts
               (keyboard, gamepad, touch),
-              model.ts (low-poly car), camera.ts (chase + bonnet)
+              model.ts (low-poly car), camera.ts (chase, cockpit, bonnet)
   race/       raceScreen.ts (fixed-step loop, interpolation, pause), session.ts
               (countdown, checkpoints, lap timing, splits, race distance), ghost.ts,
               records.ts, resultsScreen.ts, timing.ts (gaps between cars), weather.ts (changing weather), ai.ts (AI opponents), racingLine.ts
@@ -118,7 +118,7 @@ Everything static is merged or instanced, which comes to about 15 draw calls for
 
 Physics runs at a fixed 120 Hz from an accumulator (`core/fixedStep.ts`), and rendering interpolates between the last two physics states. Nothing in `car/physics.ts` reads the clock or the frame time, so the same inputs give the same result at any refresh rate (a test checks 60, 144, 240 Hz and jittery frame times give identical ticks). The car is a real one, simplified (`car/physics.ts`, tuning in `SIM` in `config/handling.ts`): a two-axle ("bicycle") model, worked out twice a tick. Each axle has its share of the weight (45 % front, 55 % rear), moved forward under braking and back under power by the centre of gravity's height, plus downforce that grows with the square of the speed (half as much grip again at top speed as in a hairpin). Each axle's tyres have a slip angle, the angle between where they point and where they're going. Their sideways force rises with it to a peak at 0.1 rad, then falls away as they slide (Pacejka's curve). Whatever grip they give to braking or driving they can't give to cornering (the friction circle). The rear tyres are wider (20 % more grip), so at the limit the car understeers gently, unless the throttle or the brakes use up the rear's grip: then it oversteers. Brakes ask up to 1.5 × as much at full pedal as they can do in a hairpin: at speed the downforce takes it, slowly they lock (the front first with the balance forward, the rear first with it back). Driving, the rear tyres grip a little less than sideways, so the throttle can spin them up out of slow bends and in the wet. The tyres hold 15 % more than the corner speeds the racing line plans for, which leaves the AI (and you) something in hand. At walking pace and reversing it blends into the simple model (the turn follows the steering, as far as grip allows) so it can't trip over itself at a standstill. Steering lock still shrinks with speed, there's much less grip and speed on grass, and trees stop the car.
 
-**No driver aids.** Your car has no ABS, no traction control and no stability control, as a real F1 car hasn't: stamp on the brakes slowly and they lock (the car won't turn while they do), floor it out of a slow bend and the rear spins up and steps out. The AI drivers have the feel for it: they brake right at the point of locking, feed the throttle in short of wheelspin and catch a slide (`CarPhysics.abs`, `tc`, `stability`, `steerHelp`, all on for them; `race/assists.ts` `bareCar` for you). A key is all or nothing, so a key's pedal goes down over a moment, as a foot would (0.3 s for the throttle, 0.12 s for the brake: `INPUT.keyThrottleRise`); a gamepad's triggers are yours to squeeze.
+**Car aids** (Assists: ABS, traction control, the steering assist). With them all off your car is the bare car, as a real F1 car is: stamp on the brakes slowly and they lock (the car won't turn while they do), floor it out of a slow bend and the rear spins up and steps out. *ABS* keeps the brakes just short of locking and eases them on tyres busy cornering. *Traction control* medium stops wheelspin but leaves you the slide; full also leaves the rear tyres the grip they need for the corner and catches a slide. The *steering assist* never turns the front wheels further than their grip can use. The AI drivers have the same feel: they brake right at the point of locking, feed the throttle in short of wheelspin and catch a slide (`CarPhysics.abs`, `tc`, `tcFull`, `stability`, `steerHelp`, all on for them; `race/assists.ts` `carAids` for you). A key is all or nothing, so a key's pedal goes down over a moment, as a foot would (0.3 s for the throttle, 0.12 s for the brake: `INPUT.keyThrottleRise`); a gamepad's triggers are yours to squeeze.
 
 **Tyre temperatures** (`TYRE_TEMP`, each of the four tyres): a tyre heats from the work it does on the road (sliding sideways in a bend, braking, driving: a lock-up or wheelspin heats it hard) and from flexing, and the air cools it, more the faster it goes and on a wet road. The outside tyres in a bend work harder, so on a clockwise track the left ones run hotter. Each compound grips best in its window (soft 85–105 °C, medium 90–112, hard 95–120, intermediates 55–85, wets 45–75): below it the tyre loses 0.6 % of its grip a degree, above it 0.8 % and it wears faster. Sets go on at 80 °C off the blankets (wets and intermediates cooler), so the first half lap is cold; driven hard the tyres sit at about 90–105 °C. A cold or hot axle shifts the balance (cold rears: a loose car). The AI drives to the grip its tyres have, cold or hot. The HUD shows all four, blue cold, green in the window, orange and red too hot.
 
@@ -132,11 +132,13 @@ Physics runs at a fixed 120 Hz from an accumulator (`core/fixedStep.ts`), and re
 | Reset to road | R | Back | pause menu |
 | Restart the lap (practice) | R R (twice quickly) | Back Back | pause menu: Back to the grid |
 | Gear up / down (manual gears) | E / Q | RB / LB | ▲ ▼ buttons |
-| Camera (chase / bonnet) | C | Y | — |
+| Camera (chase / cockpit / bonnet) | C | Y | — |
 | Pause | Esc / P | Start | Ⅱ button |
 | Timing tower (full / compact / hidden) | T | — | tap it (full / compact) |
 | Overtake boost (a race with AI cars; hold) | Space | B | BOOST button |
 | Split screen, player 2: drive, brake, steer / boost / reset | ← ↑ → ↓ / Right Shift / `/` | their own gamepad | — |
+
+**Cameras** (`car/camera.ts`, C): chase, cockpit and bonnet. The cockpit is the driver's eyes, under the halo: the steering wheel turns as you steer, and its display shows the gear, the speed and a row of rev lights (green, red, blue, all flashing blue when it's time to change up; `CarModel.setDash`).
 
 **Your own keys** (`car/bindings.ts`, `ui/controlsPanel.ts`). The keyboard keys above are the defaults. ⌨ Controls, in the main menu and the pause menu, changes them: every driving action (drive, brake, steer left and right, gear up and down, reset, camera, pause, sound, timing tower) has two keys. Click one and press the new key; Esc cancels and Backspace clears it. A key already used by another action moves over, and the panel says from where. Reset to defaults puts them all back. Esc always pauses whatever you set, and Tab, Ctrl, Alt and the system keys can't be bound. Keys are physical keys (`KeyboardEvent.code`), shown as your keyboard layout prints them where the browser can say (Z for W on AZERTY). The race's controls hint, the pause menu and the assists panel all show your keys. The gamepad and touch controls don't change.
 
@@ -147,11 +149,12 @@ Physics runs at a fixed 120 Hz from an accumulator (`core/fixedStep.ts`), and re
 - *AI cars and the medal bot* change instantly at the ideal points, so they drive exactly as before gears existed (medal times are unchanged, and a test checks it).
 - The engine sound follows the real revs, dropping at every change up.
 
-**Assists** (`race/assists.ts`, the 🛞 Assists button in the race setup (A) and the pause menu; remembered between visits):
+**Assists**, as an F1 game has them (`race/assists.ts`, `ui/assistsPanel.ts`, the 🛞 Assists button in the race setup (A) and the pause menu; remembered between visits). Presets: *Beginner* (everything on), *Intermediate* (ABS, traction control medium, the corners of the racing line; a new player's default is close to it, without the line) and *Expert* (nothing at all, manual gears). Each one:
+- *ABS* (off / on) and *traction control* (off / medium / full): see Car aids above.
 - *Racing line* (Off / Braking / Full, `render/racingLineOverlay.ts`): the AI's racing line drawn on the road for the next 170 m, following its height and banking. Each point is coloured by what to do when you get there at the speed you're doing now: green (keep going), yellow (lift: within 8 % of the limit there) and red (brake: the corner's limit there, braking included, is below your speed). So the red starts exactly where you would have to start braking, and moves as you speed up or slow down. "Braking" draws only the yellow and red.
 - *They help, they don't drive:* hold the throttle with your hands off and the car won't get round a lap, even with everything on (a test checks this on each sample track).
-- *Braking assist:* coming into a corner faster than the racing line allows, it touches the brakes (25 %) if you aren't braking, or tops your braking up by up to 35 % if you are. It never lifts your throttle. Not enough on its own: you still have to brake.
-- *Steering assist:* while you're not steering it eases you back towards the racing line, in proportion to how far off it you are and against heading away from it, so it settles onto the line instead of swinging across it. It never steers more than a fifth of the lock: it holds the line on straights and gentle bends, but a real corner needs you. The more you steer the less it does, and at full lock (any key press) it does nothing.
+- *Braking assist* (off / low / medium / high): coming into a corner faster than the racing line allows, it touches the brakes (12 / 25 / 60 %) if you aren't braking, or tops your braking up by up to 20 / 35 / 70 % if you are. It never lifts your throttle. Low and medium aren't enough on their own: you still have to brake.
+- *Steering assist* (off / on): it keeps the front tyres within their grip (see Car aids), and while you're not steering it eases you back towards the racing line, in proportion to how far off it you are and against heading away from it, so it settles onto the line instead of swinging across it. It never steers more than a fifth of the lock: it holds the line on straights and gentle bends, but a real corner needs you. The more you steer the less it does, and at full lock (any key press) it does nothing.
 - *The line's pace:* the racing line (its colours, and what the braking help aims for) is driven at 80 % of the tyres' grip and 66 % of the brakes, a little short of gold medal pace (about 1.5 % slower). Tests check that each assist gets a driver who never brakes, or never steers, further than without it, and that the steering assist alone can't do the steering.
 
 ### Track editor
@@ -485,13 +488,13 @@ A **minimap** in the top-right corner shows the track (bridges drawn on top), yo
 
 ### Car setup
 
-🔧 Setup in the race setup (G) opens the car setup (`ui/setupPanel.ts`, `SETUP` in `config/race.ts`). It's remembered between races. The middle of each choice is the car as it always was.
+🔧 Setup in the race setup (G) opens the car setup (`ui/setupPanel.ts`, `SETUP.fine` in `config/race.ts`), as an F1 game has it. It's remembered between races, and the middle of each is the car as it always was (a test checks it drives identically).
 
-| | Low / Short / Front | Medium / Balanced | High / Long / Rear |
-|---|---|---|---|
-| **Wing** | 82 % drag, 7 % less grip at 40 m/s: quicker on the straights | standard | 118 % drag, 7 % more grip at 40 m/s: quicker through fast bends |
-| **Gears** | 5 % more pull, tops out 3 % lower | standard | 5 % less pull, tops out 3 % higher |
-| **Brake balance** | front: 97 % bite, steadier under braking | standard | rear: 102 % bite, turns in more readily under braking, but the tail can step out |
+- **Front wing** (1–11): each step moves 1 % of the downforce onto the front tyres. More: the car turns in harder at speed and the tail gets lighter. Less: steadier, but it pushes wide in fast bends.
+- **Rear wing** (1–11): downforce against drag, from 82 % drag and 7 % less grip at 40 m/s (1, the old low wing) to 118 % drag and 7 % more (11, the old high wing).
+- **Brake bias** (50–70 % front): forward is steadier under braking but locks the fronts first; rearward lets the car rotate into the bend but locks the rears first.
+- **Differential** (50–100 % lock on the throttle): more lock, more drive before the wheels spin and steadier out of the bends (it pushes wide); less, the car turns more on the throttle but spins its wheels sooner.
+- **Gears** (short / medium / long): 5 % more pull and a 3 % lower top, or the other way round.
 
 - Downforce grows with the square of the speed, so the wing matters most in fast bends. The AI's speed plan includes it: `cornerSpeed()` in `race/racingLine.ts` solves for the speed a bend allows with downforce.
 - The panel shows what each wing is worth on this track: the flat-out planned lap with low and high wing against medium (`wingLapTimes()` in `race/strategy.ts`). It also suggests the quickest. The balance is set so each wing is the quickest on about a third of the built-in tracks, by a few tenths a lap: Monza and Las Vegas are low-wing tracks, Budapest a high-wing one.

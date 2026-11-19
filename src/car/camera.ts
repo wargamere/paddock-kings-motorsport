@@ -3,7 +3,13 @@ import { CAMERA } from '../config/handling.ts';
 import { settings, updateSettings } from '../core/settings.ts';
 import { angleDelta, type CarState } from './physics.ts';
 
-export type CameraMode = 'chase' | 'bonnet';
+export type CameraMode = 'chase' | 'cockpit' | 'bonnet';
+
+/** How close the outside cameras draw from (m). */
+const NEAR = 0.3;
+
+/** The cameras, in the order C goes through them. */
+const MODES: readonly CameraMode[] = ['chase', 'cockpit', 'bonnet'];
 
 /**
  * Chase camera that swings round behind the car with a little lag, plus a
@@ -28,7 +34,7 @@ export class CameraRig {
   }
 
   toggle(): void {
-    this.mode = this.mode === 'chase' ? 'bonnet' : 'chase';
+    this.mode = MODES[(MODES.indexOf(this.mode) + 1) % MODES.length];
     updateSettings({ camera: this.mode });
   }
 
@@ -52,7 +58,16 @@ export class CameraRig {
     // Look a little up or down the slope the car is on.
     const tilt = Math.tan(st.pitch);
 
-    if (this.mode === 'bonnet') {
+    if (this.mode === 'cockpit') {
+      // In the driver's seat: leaning with the car, as the driver's head does.
+      const c = CAMERA.cockpit;
+      cam.position.set(st.x + fx * c.forward, st.y + c.height + kick * 0.2, st.z + fz * c.forward);
+      const r = st.roll;
+      cam.up.set(-Math.sin(r) * fz, Math.cos(r), Math.sin(r) * fx);
+      cam.lookAt(st.x + fx * c.lookAhead, st.y + c.lookHeight + tilt * c.lookAhead, st.z + fz * c.lookAhead);
+      this.yaw = st.heading;
+      fov = c.fov;
+    } else if (this.mode === 'bonnet') {
       const b = CAMERA.bonnet;
       cam.position.set(st.x + fx * b.forward, st.y + b.height + kick * 0.3, st.z + fz * b.forward);
       // Lean with the road's banking: up tilts away from the side that is raised.
@@ -79,6 +94,12 @@ export class CameraRig {
       cam.position.set(px, base + this.lift + shake + kick, pz);
       cam.lookAt(st.x + yx * c.lookAhead, st.y + c.lookHeight + tilt * c.lookAhead * 0.6, st.z + yz * c.lookAhead);
       fov = Math.min(c.fovMax, c.fov + speed * c.fovPerSpeed);
+    }
+    // (In the cockpit the halo and the wheel are only centimetres away: draw from closer in.)
+    const near = this.mode === 'cockpit' ? CAMERA.cockpit.near : NEAR;
+    if (cam.near !== near) {
+      cam.near = near;
+      cam.updateProjectionMatrix();
     }
     this.fov += (fov - this.fov) * (1 - Math.exp(-4 * dt));
     if (Math.abs(cam.fov - this.fov) > 0.01) {

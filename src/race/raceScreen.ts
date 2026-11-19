@@ -47,7 +47,7 @@ import { raceOrder } from './classify.ts';
 import { RaceControl, type ControlCar, type ControlEvent } from './raceControl.ts';
 import { sampleAt, leftOf } from '../track/spline.ts';
 import { GhostRecorder, ghostPose, type GhostLap } from './ghost.ts';
-import { applyAssists, assistDriver, bareCar } from './assists.ts';
+import { applyAssists, assistDriver, carAids } from './assists.ts';
 import { AuthorLap, medalTimes } from './medals.ts';
 import { PitCrew, pitBox } from './pitStop.ts';
 import { bandFor, compoundsMet, pickCompound, pitLoss, suggestedSetup, trackLapTime, trackTyreLife } from './strategy.ts';
@@ -783,7 +783,7 @@ export class RaceScreen implements Screen {
     const ai = o.ai, car = ai.car, s = ai.session, st = car.state;
     if (!s.canDrive || s.retired) return NO_INPUT;
     if (s.phase === 'finished') return BRAKE;
-    bareCar(car);
+    carAids(car, settings().assists);
     let inp = applyAssists(this.game.track, st, this.input2.sample(this.p2Input), settings().assists, this.wet, car.tune, car.setup);
     inp.boost = this.p2Input.boost;
     if (Number.isFinite(ai.raceCap) && st.speed > ai.raceCap) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, st.speed > ai.raceCap + 3 ? 0.4 : 0) };
@@ -1213,9 +1213,9 @@ export class RaceScreen implements Screen {
     if ((session.phase === 'racing' || this.watching) && this.weather.kind === 'changing') this.updateWeather(dt);
     const assists = settings().assists;
     car.gearbox = assists.gears;
-    // (Your car has no driver aids; the autopilot, an AI, drives with an AI's feel for the pedals.)
-    if (this.autopilot) car.abs = car.tc = car.stability = car.steerHelp = true;
-    else bareCar(car);
+    // (Your car's aids as you've set them; the autopilot, an AI, drives with an AI's feel for the pedals.)
+    if (this.autopilot) car.abs = car.tc = car.tcFull = car.stability = car.steerHelp = true;
+    else carAids(car, assists);
     let inp = session.phase === 'racing' ? this.input.sample(this.tickInput) : session.phase === 'finished' ? BRAKE : NO_INPUT;
     if (session.phase === 'racing') inp = applyAssists(this.game.track, car.state, this.tickInput, assists, this.wet, car.tune, car.setup);
     if (this.autopilot && session.phase === 'racing') inp = this.autopilot.drive(car.state);
@@ -2095,6 +2095,11 @@ export class RaceScreen implements Screen {
     else if (!this.paused && this.stage !== 'grid') alpha = this.fixed.advance(dt, () => this.tick(), 12, 8);
     lerpState(car.prev, car.state, alpha, this.view);
     this.model.update(this.view, dt);
+    // In the cockpit, the steering wheel's display.
+    if (this.rig.mode === 'cockpit' && !this.watching) {
+      const mph = settings().units === 'mph';
+      this.model.setDash(car.state.gear, this.view.speed, car.state.rpm, HANDLING.gearbox.shiftLight, mph ? STR.race.speedUnitMph : STR.race.speedUnit, mph ? 2.23694 : 3.6);
+    }
     this.opponents.forEach((o, k) => {
       if (this.gone[k + 1]) return;
       lerpState(o.ai.car.prev, o.ai.car.state, alpha, o.view);
