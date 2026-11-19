@@ -9,6 +9,7 @@ import { axes, placedObstacles, placedOn, runoffLayout, type Placed, type Runoff
 import { leftOf, sampleAt } from '../track/spline.ts';
 import { groundPose } from '../track/ground.ts';
 import { enginePull, stepGearbox, type GearboxMode } from './gearbox.ts';
+import { ChassisDynamics } from './dynamics.ts';
 import { compoundBrake, compoundGrip, compoundLife, standardBrake, standardGrip, tyreCurve } from './tyres.ts';
 import { surfaceFor, terrainHeight, type TrackSurface } from '../track/surface.ts';
 import type { Track } from '../track/track.ts';
@@ -84,7 +85,7 @@ export class CarState {
   gear = 1;
   rpm = 0;
   shift = 0;
-  /** Brakes locked on this tick (1: the wheels have stopped turning) and the rear wheels spinning (1: fully). */
+  /** Progressive braking-slip and driven-wheel-slip intensity, 0..1. */
   lockup = 0;
   wheelspin = 0;
 
@@ -254,15 +255,17 @@ export class CarPhysics {
   steerHelp = true;
   stability = true;
   /** The car's acceleration along itself on the last tick (m/s²), which moves its weight between the axles. */
-  private loadAx = 0;
+  private readonly chassis = new ChassisDynamics();
+  /** Four contact patches, FL/FR/RL/RR: load, forces, slip and grip use for telemetry. */
+  readonly contacts = this.chassis.wheels;
+  private readonly contactHeat = [1, 1, 1, 1];
+  private readonly contactSurface = [1, 1, 1, 1];
   /** Fuel aboard (kg): the race fills the tank for its distance (FUEL), and it burns off as the car goes. */
   fuel = 0;
   /** Each tyre's temperature (°C): front left, front right, rear left, rear right (see TYRE_TEMP). */
   readonly tyreTemp = [80, 80, 80, 80];
-  /** The power (W/kg) the front and rear tyres put into the road on the last tick, and the sideways acceleration (+ right). */
-  private workF = 0;
-  private workR = 0;
-  private workSide = 0;
+  /** Slower carcass temperature: a hot surface can cool without instantly cooling the whole tyre. */
+  readonly tyreCore = [80, 80, 80, 80];
   private readonly track: Track;
   private readonly locator: TrackLocator;
   private readonly obstacles: ObstacleGrid;
@@ -302,7 +305,7 @@ export class CarPhysics {
     st.x = p.x + l.x * lateral;
     st.z = p.y + l.y * lateral;
     st.heading = Math.atan2(t.y, t.x);
-    this.loadAx = 0;
+    this.chassis.reset();
     const pos = this.locator.locate({ x: st.x, y: st.z });
     st.trackIndex = pos.index;
     st.s = pos.s;
@@ -373,7 +376,7 @@ export class CarPhysics {
 
   /** Share of the brakes' bite the tyres give (less on a wet road). */
   get brakeScale(): number {
-    return this.wear ? compoundBrake(this.compound, this.wetness) : standardBrake(this.wetness);
+    return this.wear ? compoundBrake(this.compound, this.wetness) * tyreCurve(this.tyreUse) : standardBrake(this.wetness);
   }
 
   /** How damaged the car is overall (0..1). */
@@ -415,6 +418,8 @@ export class CarPhysics {
     this.tyreAge = 0;
     this.tyreUse = 0;
     this.tyreTemp.fill(TYRE_TEMP.blanket[compound]);
+    this.tyreCore.fill(TYRE_TEMP.blanket[compound]);
+    this.chassis.reset();
   }
 
   /** "R": back onto the road at the nearest point, facing the right way. */
@@ -469,6 +474,8 @@ export class CarPhysics {
     // The rain and worn tyres take some of it away: how hard the car can corner (not how
     // quickly it answers the wheel, which is the surface's).
     const surfaceGrip = (a.gripFactor + b.gripFactor) / 2;
+    this.contactSurface[0] = this.contactSurface[2] = a.gripFactor / surfaceGrip;
+    this.contactSurface[1] = this.contactSurface[3] = b.gripFactor / surfaceGrip;
     const grip = surfaceGrip * this.gripScale * roadGrip * this.damageGrip * this.tune.grip;
     const wing = aeroOf(this.setup);
     const gears = SETUP.gears[this.setup.gears];
@@ -491,7 +498,7 @@ export class CarPhysics {
     if (this.steerHelp && vf > SIM.blendTo) {
       const heads = Math.atan2(vr + HANDLING.wheelBase * (1 - SIM.frontWeight) * st.yawRate, vf);
       const most = SIM.steerHelp * SIM.peakSlip;
-      st.steer = clamp(st.steer, Math.max(-lock, heads - most), Math.min(lock, heads + most));
+      st.steer = clamp(clamp(st.steer, heads - most, heads + most), -lock, lock);
     }
 
     // --- longitudinal: the engine's push (at the rear wheels), the brakes, and resistances that can only slow the car
@@ -524,7 +531,8 @@ export class CarPhysics {
       if (vf > 0.5) brakeAsk = (brakeDecel * brake) / mass;
       else if (throttle === 0 && vf > -H.reverseMaxSpeed) drive -= H.reverseAccel * accelF * brake;
     }
-    if (throttle === 0 && brake === 0) resist += H.engineBraking / mass;
+    const coast = throttle === 0 && brake === 0 ? H.engineBraking / mass : 0;
+    resist += coast;
     if (inp.handbrake) resist += H.handbrakeDecel;
     // Gravity along the slope: uphill slows the car, downhill speeds it up.
     drive -= G * H.slopeFactor * this.slopeAhead(cos, sin, pos.index, pos.lateral);
@@ -563,23 +571,25 @@ export class CarPhysics {
     st.lockup = 0;
     st.wheelspin = 0;
     let slide = 0;
+    let headingStep = yawA * dt;
     if (w > 0) {
-      const d = this.dynamics(vf, vr, st.yawRate, engine, drive, brakeAsk * SIM.brakePower, resist, latMax / downforce, (brakeDecel / H.brakeDecel) * surfaceGrip, downforce, inp.handbrake);
+      const d = this.dynamics(vf, vr, st.yawRate, engine, drive, brakeAsk * SIM.brakePower, resist, latMax / downforce, (brakeDecel / H.brakeDecel) * surfaceGrip, downforce, inp.handbrake, coast);
       vf = vfA + (d.vf - vfA) * w;
       vr = vrA + (d.vr - vrA) * w;
       st.yawRate = yawA + (d.yaw - yawA) * w;
+      headingStep += (d.heading - headingStep) * w;
       slide = d.slide * w;
     } else {
       vf = vfA;
       vr = vrA;
       st.yawRate = yawA;
-      this.loadAx = 0;
+      this.chassis.reset();
     }
 
     // --- integrate. Velocity stays in world space while the body rotates, which is what makes it slide.
     st.vx = vf * cos - vr * sin;
     st.vz = vf * sin + vr * cos;
-    st.heading += st.yawRate * dt;
+    st.heading += headingStep;
     if (st.heading > Math.PI) st.heading -= Math.PI * 2;
     else if (st.heading < -Math.PI) st.heading += Math.PI * 2;
     st.x += st.vx * dt;
@@ -624,22 +634,19 @@ export class CarPhysics {
     const v = Math.abs(vf);
     const air = T.air + (T.wetAir - T.air) * this.wetness;
     const cool = T.cool * (1 + v / T.coolSpeed) * (1 + T.wetCool * this.wetness);
-    // In a bend to the right (+), the left (outside) tyres do more of it.
-    const lat = Math.max(-1, Math.min(1, this.workSide / Math.max(1, HANDLING.maxLateralAccel)));
-    const left = 0.5 + T.outside * lat;
     for (let i = 0; i < 4; i++) {
-      const work = (i < 2 ? this.workF : this.workR) * (i % 2 === 0 ? left : 1 - left) * w;
+      const work = this.chassis.work[i] * w;
       const t = this.tyreTemp[i];
-      this.tyreTemp[i] = t + (T.heat * work + T.roll * v - cool * (t - air)) * dt;
+      const exchange = (t - this.tyreCore[i]) * T.coreExchange;
+      this.tyreTemp[i] = clamp(t + (T.heat * work + T.roll * v - cool * (t - air) - exchange) * dt, air, 300);
+      this.tyreCore[i] = clamp(this.tyreCore[i] + (exchange * T.coreRate - T.coreCool * (this.tyreCore[i] - air)) * dt, air, 220);
     }
   }
 
 
   /**
-   * The full model for one tick (SIM): two axles, each with its share of the
-   * car's weight (moved forward under braking, back under power), its slip
-   * angle and its grip, shared between cornering and braking or driving (the
-   * friction circle). From forward speed `vf` and sideways speed `vr` (+ right)
+   * The four-patch model for one tick (SIM), with transient tyre force and
+   * damped pitch/roll load transfer. From forward speed `vf` and sideways speed `vr` (+ right)
    * and yaw rate `yaw`: `push` along the car at the rear wheels (the engine),
    * `body` pushing the whole car (the slope), `brakeAsk` from the brakes, `resist` (drag, rolling) that
    * only slows it. `lat` is the most sideways acceleration the tyres give
@@ -649,145 +656,17 @@ export class CarPhysics {
    * are per unit mass. Returns the new speeds, yaw rate, and how fast the
    * tyres slide over the road (m/s).
    */
-  private dynamics(vf: number, vr: number, yaw: number, push: number, body: number, brakeAsk: number, resist: number, lat: number, bite: number, downforce: number, handbrake: boolean): { vf: number; vr: number; yaw: number; slide: number } {
-    const P = SIM;
-    const st = this.state;
-    const L = HANDLING.wheelBase;
-    const a = L * (1 - P.frontWeight); // centre of gravity to the front axle
-    const b = L * P.frontWeight; // and to the rear
-    const gEff = G * downforce;
-    // Grip per unit of load: what makes `lat` (with downforce) the car's cornering limit.
-    const mu = (lat / G) * P.grip;
-    // Along their length they grip as the brakes bite (the rain, the road, the tyres), and the ground.
-    const muX = (HANDLING.maxLateralAccel / G) * P.grip * P.longGrip * bite;
-    // (Your own brake bias, if you've set one: a % either side of the standard.)
-    const bias = this.setup.brakeBias === undefined ? P.brakeBias[this.setup.brakes] : P.brakeBias.balanced + (this.setup.brakeBias - SETUP.fine.biasMid) / 100;
-    // The differential: more lock, more drive before wheelspin, and steadier under power.
-    const diff = this.setup.diff === undefined ? 0 : (this.setup.diff - SETUP.fine.diffMid) / 100;
-    // The front wing: a share of the downforce moved onto the front tyres.
-    const aeroFront = aeroOf(this.setup).front;
-    const steer = st.steer;
-    const cs = Math.cos(steer);
-    const sn = Math.sin(steer);
-    const peak = P.peakSlip;
-    // The tyre curve's stiffness, so that it peaks at `peak` (Pacejka with E = 0).
-    const B = Math.tan(Math.PI / (2 * P.shape)) / peak;
-    const curve = (alpha: number) => Math.sign(alpha) * Math.sin(P.shape * Math.atan(B * Math.abs(alpha)));
-    const h = this.dt / P.substeps;
-    // (The tyres' temperatures: the grip all four have is in `lat` already, through gripScale; this
-    // is each axle's against that, so cold rears, say, make the car loose.)
-    const heatAll = this.tempGrip();
-    const heatF = this.tempGrip('front') / heatAll;
-    const heatR = this.tempGrip('rear') / heatAll;
-    let workF = 0;
-    let workR = 0;
-    let workSide = 0;
-    let slide = 0;
-    let lockup = 0;
-    let spin = 0;
-    for (let k = 0; k < P.substeps; k++) {
-      // Load on each axle, with the weight moved by the last acceleration.
-      const move = clamp((this.loadAx * P.cgHeight) / L, -P.transferMax * gEff, P.transferMax * gEff);
-      const shift = G * (downforce - 1) * aeroFront;
-      const nf = gEff * P.frontWeight - move + shift;
-      const nr = gEff * (1 - P.frontWeight) + move - shift;
-      // (A lightly loaded tyre grips a little harder for its load, a heavily loaded one less.)
-      const n0f = gEff * P.frontWeight;
-      const n0r = gEff * (1 - P.frontWeight);
-      const fyMaxF = mu * nf * (1 - P.loadSensitivity * (nf / n0f - 1)) * heatF;
-      const fyMaxR = mu * P.rearGrip * nr * (1 - P.loadSensitivity * (nr / n0r - 1)) * heatR;
-      // Slip angles: where each axle is going against where its wheels point.
-      const alphaF = Math.atan2(vr + a * yaw, vf) - steer;
-      const alphaR = Math.atan2(vr - b * yaw, vf);
-      const fxMaxF = muX * nf * (1 - P.loadSensitivity * (nf / n0f - 1)) * heatF;
-      const fxMaxR = muX * P.rearGrip * nr * (1 - P.loadSensitivity * (nr / n0r - 1)) * heatR;
-      // Brakes, shared by load (and the balance): ABS holds each axle just short of locking.
-      const shareF = clamp(nf / (nf + nr) + bias, 0.2, 0.85);
-      let bf = brakeAsk * shareF;
-      let br = brakeAsk * (1 - shareF);
-      const lockF = bf > fxMaxF && !this.abs;
-      // (ABS also eases the brakes on tyres busy cornering: the front, so the car still steers while
-      // braking; the rear, so braking into a bend doesn't spin it.)
-      if (this.abs) bf = Math.min(bf, fxMaxF * P.absMargin * Math.sqrt(Math.max(P.absSteerFloor, 1 - curve(alphaF) ** 2)));
-      let lockR = handbrake || (br > fxMaxR && !this.abs);
-      if (this.abs && !handbrake) br = Math.min(br, fxMaxR * P.absMargin * Math.sqrt(Math.max(P.tcFloor, 1 - curve(alphaR) ** 2)));
-      // Drive at the rear wheels. Traction control holds it short of wheelspin, and short of
-      // using up the grip the rear tyres need for the corner (so it doesn't spin the car).
-      let net = push - br;
-      let spinR = false;
-      // (Driving, the tyres grip about as hard as they do sideways: the engine can overpower them.)
-      const fxDriveR = fyMaxR * P.driveGrip * (1 + SETUP.fine.diffGrip * diff);
-      const fxR0 = net > 0 ? fxDriveR : fxMaxR;
-      const tcCap = fxDriveR * P.tcMargin * (this.tcFull ? Math.sqrt(Math.max(P.tcFloor, 1 - curve(alphaR) ** 2)) : 1);
-      if (this.tc && net > tcCap) net = tcCap;
-      else if (net > fxDriveR) spinR = true;
-      if (lockR && net > 0) lockR = false;
-      // Forces (per unit mass) along and across each axle's wheels.
-      let fxF: number, fyF: number, fxR: number, fyR: number;
-      if (lockF) {
-        // Locked: the tyres slide, pushing against the way they're going (and so can't steer the car).
-        const dir = Math.atan2(Math.abs(Math.sin(alphaF)), Math.abs(Math.cos(alphaF)));
-        fxF = -P.slide * fxMaxF * Math.cos(dir);
-        fyF = -Math.sign(alphaF) * P.slide * fyMaxF * Math.sin(dir);
-      } else {
-        fxF = -bf;
-        const left = Math.sqrt(Math.max(0, 1 - (fxF / fxMaxF) ** 2));
-        fyF = -curve(alphaF) * fyMaxF * left;
-      }
-      if (lockR) {
-        const dir = Math.atan2(Math.abs(Math.sin(alphaR)), Math.abs(Math.cos(alphaR)));
-        fxR = -P.slide * fxMaxR * Math.cos(dir);
-        fyR = -Math.sign(alphaR) * P.slide * fyMaxR * Math.sin(dir);
-      } else if (spinR) {
-        // Spinning up: they push only as hard as a sliding tyre can, and hardly hold sideways at all.
-        fxR = P.slide * fxDriveR;
-        fyR = -curve(alphaR) * fyMaxR * (1 - P.slide) * 0.6;
-      } else {
-        fxR = net;
-        const left = Math.sqrt(Math.max(0, 1 - (fxR / fxR0) ** 2));
-        fyR = -curve(alphaR) * fyMaxR * left;
-      }
-      // Along and across the car, and the turn.
-      const along = fxF * cs - fyF * sn + fxR;
-      const across = fxF * sn + fyF * cs + fyR;
-      let turn = (a * (fxF * sn + fyF * cs) - b * fyR) / P.yawInertia;
-      // (A locked differential resists the car turning under power; an open one lets it.)
-      if (diff !== 0 && fxR > 0) turn -= SETUP.fine.diffYaw * diff * Math.min(1, fxR / Math.max(1, fxDriveR)) * yaw;
-      // Stability control: once the rear tyres slide further than the front ones (the tail
-      // stepping out), it brakes a wheel on one side to turn the car back.
-      if (this.stability) {
-        const out = Math.abs(alphaR) - Math.max(P.escFrom * peak, Math.abs(alphaF));
-        if (out > 0 && Math.sign(alphaR) === -Math.sign(yaw)) turn -= Math.sign(yaw) * Math.min(P.escMax, P.escGain * out) * gEff;
-      }
-      // Drag and rolling resistance only ever slow the car. (The velocity is kept in the world's
-      // frame while the car turns, as step() does, so there are no turning terms here.)
-      const vf1 = vf + (along + body) * h;
-      const r = resist * h;
-      vf = Math.abs(vf1) <= r ? 0 : vf1 - Math.sign(vf1) * r;
-      vr += across * h;
-      yaw += turn * h;
-      this.loadAx = along - resist;
-      // How fast the tyres are sliding: sideways past most of their grip, or locked, or spinning.
-      const over = (alpha: number) => Math.max(0, Math.abs(alpha) - P.slideFrom * peak) * Math.abs(vf);
-      slide = Math.max(over(alphaF), over(alphaR));
-      if (lockF || lockR) slide = Math.max(slide, Math.abs(vf));
-      if (spinR) slide = Math.max(slide, Math.min(Math.abs(vf), ((push - fxDriveR) / fxDriveR) * 8));
-      lockup = lockF || lockR ? 1 : 0;
-      spin = spinR ? 1 : 0;
-      // The work the tyres do on the road (W/kg), which heats them: sliding sideways (the force ×
-      // how fast they slip across), and along (locked or spinning: the whole speed; else a little).
-      const v = Math.abs(vf);
-      const lengthWork = (fx: number, max: number, sliding: boolean) => Math.abs(fx) * (sliding ? v : v * 0.08 * (fx / max) ** 2);
-      workF += (Math.abs(fyF) * v * Math.abs(Math.tan(alphaF)) + lengthWork(fxF, fxMaxF, lockF)) / P.substeps;
-      workR += (Math.abs(fyR) * v * Math.abs(Math.tan(alphaR)) + lengthWork(fxR, spinR ? fxDriveR : fxMaxR, lockR || spinR)) / P.substeps;
-      workSide += across / P.substeps;
-    }
-    this.workF = workF;
-    this.workR = workR;
-    this.workSide = workSide;
-    st.lockup = lockup;
-    st.wheelspin = spin;
-    return { vf, vr, yaw, slide };
+  private dynamics(vf: number, vr: number, yaw: number, push: number, body: number, brakeAsk: number, resist: number, lat: number, bite: number, downforce: number, handbrake: boolean, coast: number) {
+    const heat = this.tempGrip();
+    for (let i = 0; i < 4; i++) this.contactHeat[i] = this.tyreTempGrip(i) / heat;
+    const result = this.chassis.step({ vf, vr, yaw, steer: this.state.steer, drive: push, coast,
+      body, brake: brakeAsk, resist: Math.max(0, resist - coast), lat, bite: bite * heat, downforce,
+      aeroFront: aeroOf(this.setup).front, setup: this.setup, dt: this.dt, abs: this.abs,
+      tc: this.tc, fullTc: this.tcFull, stability: this.stability, handbrake,
+      heat: this.contactHeat, surface: this.contactSurface });
+    this.state.lockup = result.lockup;
+    this.state.wheelspin = result.wheelspin;
+    return result;
   }
 
   /** Slope along the car's heading at its position (road grade on the road, terrain elsewhere). */
