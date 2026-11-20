@@ -1,5 +1,6 @@
 import { STR } from '../config/strings.ts';
 import { h } from './dom.ts';
+import { DrivingIndicators } from './drivingIndicators.ts';
 
 /** What player 2's HUD shows, each frame. */
 export interface PlayerHudState {
@@ -24,6 +25,7 @@ export interface PlayerHudState {
  * the boost at the bottom right; messages (lap times, the flag) in the middle.
  */
 export class PlayerHud {
+  readonly driving = new DrivingIndicators();
   readonly root: HTMLElement;
   private readonly pos: HTMLElement;
   private readonly lap: HTMLElement;
@@ -60,6 +62,7 @@ export class PlayerHud {
       h('div', { class: 'p2-top' }, h('span', { class: 'p2-name', text: P.player2 }), this.pos, this.lap, this.time),
       this.flagLine,
       this.msg,
+      this.driving.root,
       h('div', { class: 'p2-panel' }, h('div', { class: 'p2-row' }, this.gear, this.speed, h('span', { class: 'speed-unit', text: P.speedUnit })), h('div', { class: 'p2-row p2-small' }, this.tyres, this.damage), this.power),
     );
   }
@@ -107,6 +110,7 @@ export class PlayerHud {
   }
 
   clear(): void {
+    this.driving.clear();
     this.msgLeft = 0;
     this.msg.classList.remove('on');
   }

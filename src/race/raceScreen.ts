@@ -144,6 +144,15 @@ export class RaceScreen implements Screen {
   private readonly touch: TouchControls;
   private readonly fixed = new FixedStep(HANDLING.tickRate);
   private readonly rig = new CameraRig();
+  private readonly awarenessCars: CarState[] = [];
+  /** Visibility is applied per camera, so an exterior view still sees a complete rival car. */
+  private readonly prepareCockpitView = (camera: PerspectiveCamera): void => {
+    const main = camera === this.game.view3d?.camera;
+    const clear = !settings().cockpitPillar;
+    const watched = this.watching ? this.watched() : null;
+    this.model?.setCockpitView(clear && main && this.rig.mode === 'cockpit' && !this.watching);
+    for (const o of this.opponents) o.model.setCockpitView(clear && ((main && this.rig.mode === 'cockpit' && watched === o) || (!main && this.rig2.mode === 'cockpit' && this.p2 === o)));
+  };
   /**
    * Split screen (a race for two): player 2's car (an AI car's seat, driven by
    * their own controls), its camera (the bottom half of the screen), its HUD
@@ -459,6 +468,10 @@ export class RaceScreen implements Screen {
   }
 
   exit(): void {
+    this.hud.driving.clear();
+    this.hud2.driving.clear();
+    this.model?.setCockpitView(false);
+    for (const o of this.opponents) o.model.setCockpitView(false);
     this.game.coach = false;
     this.hud.hideCoach();
     this.fx?.clear();
@@ -644,6 +657,8 @@ export class RaceScreen implements Screen {
     this.touch.release();
     this.hud.clearFlash();
     this.hud.setPosition(null);
+    this.hud.driving.clear();
+    this.hud2.driving.clear();
     this.position = null;
     if (this.ghostModel) this.ghostModel.root.visible = false;
     audio.setEngine(true);
@@ -2159,11 +2174,19 @@ export class RaceScreen implements Screen {
       this.hud.minimap.draw(this.game.track, focus, pose, others);
     }
     const renderStart = performance.now();
-    if (this.p2) v.renderSplit(this.cam2);
-    else v.render();
+    if (this.p2) v.renderSplit(this.cam2, this.prepareCockpitView);
+    else v.render(this.prepareCockpitView);
     const renderMs = performance.now() - renderStart;
     this.hud.setSpeed(focus.speed);
     const assists = settings().assists;
+    const preferences = settings();
+    this.awarenessCars.length = 0;
+    if (!this.gone[0]) this.awarenessCars.push(this.view);
+    this.opponents.forEach((o, k) => { if (!this.gone[k + 1]) this.awarenessCars.push(o.view); });
+    if (!this.paused && !this.watching && session.phase === 'racing' && this.stage === 'run' && !this.gone[0]) this.hud.driving.update(this.view, this.awarenessCars, car, dt, preferences.raceRadar, preferences.drivingFeedback);
+    else this.hud.driving.clear();
+    if (this.p2 && !this.paused && this.p2.ai.session.phase === 'racing' && this.stage === 'run') this.hud2.driving.update(this.p2.view, this.awarenessCars, this.p2.ai.car, dt, preferences.raceRadar, preferences.drivingFeedback);
+    else this.hud2.driving.clear();
     this.hud.setGear(car.state.gear, car.state.rpm, car.state.speed, assists.gears === 'manual', HANDLING.gearbox.shiftLight);
     this.touch.setManualGears(assists.gears === 'manual');
     this.updateLine(this.watching ? 'off' : assists.line);

@@ -207,6 +207,7 @@ const WHEELS: [number, number, number][] = [
 export class CarModel {
   readonly root = new Group();
   readonly kind: CarKind;
+  private clearCockpit = false;
   private readonly body = new Group();
   /** The formula car's steering wheel (it turns with the wheels) and its display (see setDash). */
   private readonly steeringWheel: Group | null = null;
@@ -347,7 +348,14 @@ export class CarModel {
   }
 
   private trimFor(look: DamageLook): BufferGeometry {
-    return this.kind === 'formula' ? formulaTrim(look) : trimGeometry(look);
+    return this.kind === 'formula' ? formulaTrim(look, this.clearCockpit) : trimGeometry(look);
+  }
+
+  /** Only the car being viewed from inside loses its centre pillar; exterior views stay complete. */
+  setCockpitView(clear: boolean): void {
+    if (this.kind !== 'formula' || clear === this.clearCockpit) return;
+    this.clearCockpit = clear;
+    this.trim.geometry = this.trimFor(this.look);
   }
 
   /** The front wing (the saloon's bumper) is hanging off (it scrapes the road: sparks). */

@@ -43,6 +43,9 @@ try {
     return {changingWeatherKeepsShaders,nightToDayUpdatesShader,oneWheelShader:props.length>0&&props.every(p=>p.programs.size===1),wheelCulling:wheels.every(w=>w.frustumCulled&&w.boundingSphere)};
   });
   await mkdir('test-results',{recursive:true});
+  // Measurement is complete. Stop producing new race frames while a busy GPU
+  // captures the final image; the measured trace and shader checks are unchanged.
+  await page.evaluate(()=>{window.__game.frame=()=>{};});
   await page.screenshot({path:`test-results/wet-race-${label}.png`});
   await writeFile(`test-results/wet-race-${label}.json`,JSON.stringify({...result,rate,seconds,checks,errors},null,2));await writeFile(`test-results/wet-race-${label}.cpuprofile`,JSON.stringify(profile));
   const nodes=new Map(profile.nodes.map(n=>[n.id,n])),hits=new Map();for(let i=0;i<profile.samples.length;i++){const n=nodes.get(profile.samples[i]);const key=n.callFrame.functionName+' '+n.callFrame.url.split('/').at(-1);hits.set(key,(hits.get(key)||0)+profile.timeDeltas[i]);}

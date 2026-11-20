@@ -6,6 +6,16 @@ export const STR = {
   /** Working title — change it here and it updates everywhere. */
   gameName: 'Paddock Kings: Motorsport',
   tagline: 'Dream it. Build it. Race it.',
+  driving: {
+    visibility: 'Visibility & feedback',
+    pillar: 'Cockpit centre pillar',
+    pillarHint: 'Hide the centre halo pillar in your own cockpit view for a clearer view of the road.',
+    radar: 'Proximity warnings',
+    radarHint: 'Show cars alongside or closing beside you, with red warnings when space is tight.',
+    feedback: 'Tyre feedback',
+    feedbackHint: 'Brief warnings when the brakes lock, the rear wheels spin or the front tyres slide.',
+    left: 'CAR LEFT', right: 'CAR RIGHT', lock: 'BRAKE LOCKUP', spin: 'WHEELSPIN', front: 'FRONT GRIP LIMIT',
+  },
 
   buttons: {
     drawTrack: 'Draw your track',

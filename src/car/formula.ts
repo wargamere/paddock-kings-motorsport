@@ -147,8 +147,8 @@ export function formulaAccent(): BufferGeometry {
 const trimCache = new Map<string, BufferGeometry>();
 
 /** The carbon parts, as damaged as `look` says: the front wing (on, hanging, gone) and rear wing (on, bent, gone), and scuffs. */
-export function formulaTrim(look: DamageLook): BufferGeometry {
-  const key = `${look.front}${look.rear}${look.scuffs ? 1 : 0}`;
+export function formulaTrim(look: DamageLook, clearCockpit = false): BufferGeometry {
+  const key = `${look.front}${look.rear}${look.scuffs ? 1 : 0}:${clearCockpit}`;
   const known = trimCache.get(key);
   if (known) return known;
   const parts: BufferGeometry[] = [];
@@ -197,7 +197,7 @@ export function formulaTrim(look: DamageLook): BufferGeometry {
   box(0.18, 0.15, 0.4, 0, 0.36, -2.0);
 
   // The halo over the cockpit, and the mirrors.
-  add(bar([0, 0.6, 0.82], [0, 0.95, 0.38], 0.04), CARBON);
+  if (!clearCockpit) add(bar([0, 0.6, 0.82], [0, 0.95, 0.38], 0.04), CARBON);
   for (const s of [1, -1]) {
     add(bar([s * 0.04, 0.95, 0.38], [s * 0.27, 0.93, 0.05], 0.045), CARBON);
     add(bar([s * 0.27, 0.93, 0.05], [s * 0.3, 0.7, -0.24], 0.045), CARBON);
