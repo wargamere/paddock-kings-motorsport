@@ -104,6 +104,7 @@ export class View3D {
   private readonly envSky: Mesh;
   private readonly envSun: Mesh;
   private envTarget: WebGLRenderTarget | null = null;
+  private environmentKey = '';
   private readonly sunDir = new Vector3(-0.45, 1, 0.3).normalize();
   private readonly focus = new Vector3();
   private readonly lookDir = new Vector3();
@@ -445,11 +446,15 @@ export class View3D {
     (this.sunGlow.material as SpriteMaterial).color.copy(sun).multiplyScalar(glow);
     this.envSun.position.copy(this.sunDir).multiplyScalar(1500);
     (this.envSun.material as MeshBasicMaterial).color.copy(sun).multiplyScalar(night ? 0.2 : (1 - 0.85 * rain) * GRAPHICS3D.envSun);
-    this.envTarget?.dispose();
-    // (Its cameras must see out to the sky, 2 km away.)
-    this.envTarget = this.pmrem.fromScene(this.envScene, 0.02, 1, 5000);
-    this.scene.environment = this.envTarget.texture;
-    this.scene.environmentIntensity = night ? 0.25 : GRAPHICS3D.envIntensity;
+    const environmentKey = `${id}/${time}/${rain.toFixed(2)}`;
+    if (this.environmentKey !== environmentKey) {
+      // Road wetness affects material roughness, not the sky being reflected.
+      this.envTarget?.dispose();
+      this.envTarget = this.pmrem.fromScene(this.envScene, 0.02, 1, 5000);
+      this.scene.environment = this.envTarget.texture;
+      this.scene.environmentIntensity = night ? 0.25 : GRAPHICS3D.envIntensity;
+      this.environmentKey = environmentKey;
+    }
 
     // Mountains for the Alps, a low skyline for the city.
     this.hills.scale.y = th.hillScale ?? 1;
@@ -649,7 +654,7 @@ export class View3D {
     this.renderer.setSize(size.x, size.y, false);
   }
 
-  render(): void {
+  render(beforeView?: (camera: PerspectiveCamera) => void): void {
     const now = performance.now() / 1000;
     const dt = this.lastRender ? Math.min(0.1, Math.max(0, now - this.lastRender)) : 1 / 60;
     this.lastRender = now;
@@ -664,6 +669,7 @@ export class View3D {
     this.stars.position.copy(this.camera.position);
     this.aimSun(this.camera);
     this.rain.update(this.camera.position, dt);
+    beforeView?.(this.camera);
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -688,7 +694,7 @@ export class View3D {
   private readonly splitSize = new Vector2();
 
   /** Split screen: the main camera's view on the top half, `bottom`'s on the bottom half. */
-  renderSplit(bottom: PerspectiveCamera): void {
+  renderSplit(bottom: PerspectiveCamera, beforeView?: (camera: PerspectiveCamera) => void): void {
     const now = performance.now() / 1000;
     const dt = this.lastRender ? Math.min(0.1, Math.max(0, now - this.lastRender)) : 1 / 60;
     this.lastRender = now;
@@ -711,6 +717,7 @@ export class View3D {
       this.stars.position.copy(cam.position);
       this.aimSun(cam);
       this.rain.update(cam.position, d);
+      beforeView?.(cam);
       r.render(this.scene, cam);
     }
     r.setScissorTest(false);

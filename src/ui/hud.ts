@@ -5,6 +5,7 @@ import { MEDALS, type MedalTimes } from '../race/medals.ts';
 import { formatTime } from '../race/session.ts';
 import { button, h } from './dom.ts';
 import { Minimap } from './minimap.ts';
+import { DrivingIndicators } from './drivingIndicators.ts';
 
 export interface HudActions {
   drawTrack(): void;
@@ -21,6 +22,7 @@ export type FlashKind = 'info' | 'good' | 'bad' | 'big';
  * (gear, revs and, with tyre wear, the tyres' grip) and a controls hint.
  */
 export class Hud {
+  readonly driving = new DrivingIndicators();
   readonly root: HTMLElement;
   private readonly info: HTMLElement;
   private readonly lapLabel: HTMLElement;
@@ -159,7 +161,7 @@ export class Hud {
     this.debug = h('div', { class: 'hud-debug' });
     this.coach = h('div', { class: 'hud-coach' });
     this.coach.hidden = true;
-    this.root = h('div', { class: 'screen hud' }, top, timer, this.minimap.root, this.center, speed, this.draft, this.drsBanner, this.weather, this.flag, this.picker, this.hint, this.coach, this.debug);
+    this.root = h('div', { class: 'screen hud' }, top, timer, this.minimap.root, this.center, speed, this.draft, this.drsBanner, this.weather, this.flag, this.picker, this.hint, this.coach, this.debug, this.driving.root);
   }
 
   /** Medal targets under the timer; the ones your best lap has won are lit. */
@@ -250,7 +252,8 @@ export class Hud {
   setCar(temps: readonly number[], window: readonly [number, number], fuel: number): void {
     const [lo, hi] = window;
     const state = (t: number) => (t < lo - 15 ? 'cold' : t < lo ? 'cool' : t <= hi ? 'ok' : t <= hi + 12 ? 'warm' : 'hot');
-    const key = `${temps.map((t) => Math.round(t)).join(',')}|${lo}|${Math.round(fuel)}`;
+    const fuelText = fuel.toFixed(fuel < 10 ? 1 : 0);
+    const key = `${temps.map((t) => Math.round(t)).join(',')}|${lo}|${hi}|${fuelText}|${fuel > .05}`;
     if (key === this.lastCar) return;
     this.lastCar = key;
     temps.forEach((t, i) => {
@@ -259,7 +262,7 @@ export class Hud {
       el.dataset.state = state(t);
     });
     this.fuelValue.parentElement!.hidden = fuel <= 0.05;
-    this.fuelValue.textContent = fmt(STR.race.fuelKg, { kg: fuel.toFixed(fuel < 10 ? 1 : 0) });
+    this.fuelValue.textContent = fmt(STR.race.fuelKg, { kg: fuelText });
   }
 
   /**
