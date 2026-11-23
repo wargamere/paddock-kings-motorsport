@@ -2222,7 +2222,7 @@ export class RaceScreen implements Screen {
     }
     this.radio.tick(dt);
     this.hud.setTyres(car.wear ? car.compound : null, car.tyreLeft, this.crew?.service ?? 0);
-    this.hud.setCar(car.tyreTemp, TYRE_TEMP.window[car.compound], car.fuel);
+    this.hud.setCar(car.tyreTemp, TYRE_TEMP.window[car.compound], car.fuel, car.tyreCore);
     this.updateHud(alpha);
     this.hud.tick(dt);
     this.hud2.tick(dt);

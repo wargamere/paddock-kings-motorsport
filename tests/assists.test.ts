@@ -75,8 +75,8 @@ test('stuck in 1st with manual gears, the limiter holds the car to 1st gear spee
 });
 
 test('the AI gearbox and current physics reproduce the pinned medal targets', () => {
-  // Author version 8: four contact patches, progressive slip and rear engine braking.
-  const targets = [34.02, 33.93, 33.05];
+  // Author version 9: per-compound surface/core heat, recovery and thermal grip.
+  const targets = [34.03, 33.95, 33.10];
   for (let i = 0; i < 3; i++) {
     const t = getSampleTrack(i);
     const lap = new AuthorLap(t).finish();

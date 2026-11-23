@@ -2997,9 +2997,10 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
   letter-spacing: 0.04em;
 }
 
+.tyre-temp-label { text-align: center; font-size: 0.48rem; opacity: 0.8; margin-bottom: 0.12rem; }
 .tyre-temps {
   display: grid;
-  grid-template-columns: repeat(2, 2.4rem);
+  grid-template-columns: repeat(2, 3.8rem);
   gap: 0.15rem 0.9rem;
   padding: 0.1rem 0.35rem;
   border-left: 2px solid rgba(255, 255, 255, 0.25);
@@ -3008,17 +3009,24 @@ html:not([data-screen="race"]) .rotate-prompt { display: none; }
 
 .tyre-temp {
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.tyre-surface, .tyre-core {
   border-radius: 3px;
-  padding: 0.05rem 0;
+  padding: 0.06rem 0.12rem;
   color: #0b0d12;
   background: #4cc46a;
   font-variant-numeric: tabular-nums;
 }
 
-.tyre-temp[data-state="cold"] { background: #3d7bd9; color: #fff; }
-.tyre-temp[data-state="cool"] { background: #7fb6f0; }
-.tyre-temp[data-state="warm"] { background: #f2a33a; }
-.tyre-temp[data-state="hot"] { background: #e8453c; color: #fff; }
+.tyre-thermal [data-state="cold"] { background: #3d7bd9; color: #fff; }
+.tyre-thermal [data-state="cool"] { background: #7fb6f0; }
+.tyre-thermal [data-state="warm"] { background: #f2a33a; }
+.tyre-thermal [data-state="hot"] { background: #e8453c; color: #fff; }
 
 .hud-fuel {
   display: flex;
