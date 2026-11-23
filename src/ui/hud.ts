@@ -75,6 +75,8 @@ export class Hud {
   /** The car: its four tyres' temperatures, and the fuel aboard. */
   private readonly carPanel: HTMLElement;
   private readonly tyreTemps: HTMLElement[];
+  private readonly surfaceTemps: HTMLElement[];
+  private readonly coreTemps: HTMLElement[];
   private readonly fuelValue: HTMLElement;
   private lastCar = '';
   private readonly raceBtn: HTMLButtonElement;
@@ -122,12 +124,14 @@ export class Hud {
     this.tyreValue = h('span', { class: 'tyre-value' });
     this.tyres = h('div', { class: 'hud-tyres', title: STR.race.tyresTitle }, this.tyreChip, h('div', { class: 'tyre-bar' }, this.tyreFill), this.tyreValue);
     this.tyres.hidden = true;
-    this.tyreTemps = [0, 1, 2, 3].map(() => h('span', { class: 'tyre-temp' }));
+    this.surfaceTemps = [0, 1, 2, 3].map(() => h('span', { class: 'tyre-surface' }));
+    this.coreTemps = [0, 1, 2, 3].map(() => h('span', { class: 'tyre-core' }));
+    this.tyreTemps = [0, 1, 2, 3].map((i) => h('span', { class: 'tyre-temp' }, this.surfaceTemps[i], h('span', { class: 'tyre-temp-separator', text: '/' }), this.coreTemps[i]));
     this.fuelValue = h('span', { class: 'fuel-value' });
     this.carPanel = h(
       'div',
       { class: 'hud-car', title: STR.race.carTitle },
-      h('div', { class: 'tyre-temps' }, ...this.tyreTemps),
+      h('div', { class: 'tyre-thermal' }, h('div', { class: 'tyre-temp-label', text: STR.race.tyreThermal }), h('div', { class: 'tyre-temps' }, ...this.tyreTemps)),
       h('div', { class: 'hud-fuel' }, h('span', { class: 'fuel-label', text: STR.race.fuel }), this.fuelValue),
     );
     this.picker = h('div', { class: 'tyre-picker' });
@@ -251,17 +255,21 @@ export class Hud {
    * right, °C), coloured against the window it grips best in (blue cold, green
    * in it, orange and red too hot), and the fuel aboard (kg; hidden at none).
    */
-  setCar(temps: readonly number[], window: readonly [number, number], fuel: number): void {
+  setCar(temps: readonly number[], window: readonly [number, number], fuel: number, cores: readonly number[] = temps): void {
     const [lo, hi] = window;
     const state = (t: number) => (t < lo - 15 ? 'cold' : t < lo ? 'cool' : t <= hi ? 'ok' : t <= hi + 12 ? 'warm' : 'hot');
     const fuelText = fuel.toFixed(fuel < 10 ? 1 : 0);
-    const key = `${temps.map((t) => Math.round(t)).join(',')}|${lo}|${hi}|${fuelText}|${fuel > .05}`;
+    const key = `${temps.map((t) => `${Math.round(t)}:${state(t)}`).join(',')}|${cores.map((t) => `${Math.round(t)}:${state(t)}`).join(',')}|${lo}|${hi}|${fuelText}|${fuel > .05}`;
     if (key === this.lastCar) return;
     this.lastCar = key;
     temps.forEach((t, i) => {
       const el = this.tyreTemps[i];
-      el.textContent = `${Math.round(t)}°`;
-      el.dataset.state = state(t);
+      this.surfaceTemps[i].textContent = `${Math.round(t)}°`;
+      this.surfaceTemps[i].dataset.state = state(t);
+      this.coreTemps[i].textContent = `${Math.round(cores[i])}°`;
+      this.coreTemps[i].dataset.state = state(cores[i]);
+      el.title = fmt(STR.race.tyreThermalTitle, { tyre: STR.race.tyrePositions[i], surface: Math.round(t), core: Math.round(cores[i]), lo, hi });
+      el.setAttribute('aria-label', el.title);
     });
     this.fuelValue.parentElement!.hidden = fuel <= 0.05;
     this.fuelValue.textContent = fmt(STR.race.fuelKg, { kg: fuelText });

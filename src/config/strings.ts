@@ -1092,7 +1092,10 @@ export const STR = {
     ghostUser: '{name} · best',
     /** Tyre wear and pit stops. */
     tyresTitle: 'Your tyres and how much of their life is left',
-    carTitle: 'Your tyres’ temperatures (blue: cold, green: in their window, red: overheating) and the fuel aboard',
+    carTitle: 'Tyre surface / core temperatures: the surface reacts quickly, the core stores heat. Blue: cold, green: in the working window, red: hot.',
+    tyreThermal: 'SURFACE / CORE',
+    tyrePositions: ['Front left', 'Front right', 'Rear left', 'Rear right'],
+    tyreThermalTitle: '{tyre}: surface {surface}°C, core {core}°C. Working window {lo}–{hi}°C. A brief surface spike has less effect than sustained core overheating.',
     fuel: 'FUEL',
     fuelKg: '{kg} kg',
     tyresWorn: 'Tyres going off soon: pit in the next lap or two',

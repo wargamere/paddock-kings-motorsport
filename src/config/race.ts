@@ -340,40 +340,44 @@ export const TYRES = {
 } as const;
 
 /**
- * Tyre temperatures (car/physics.ts, each of the four tyres, °C). A tyre
- * heats from the work it does: the power of its sliding (its sideways force
- * × how fast it slips sideways, and the same along it, braking and driving:
- * a lock-up or wheelspin heats it hard), × `heat` (°C a second per W/kg), and
- * from flexing, `roll` × the speed. The air cools it, `cool` × how much hotter
- * it is than the air, more the faster it goes (× 1 + speed / `coolSpeed`) and
- * on a wet road (× 1 + `wetCool` × wetness). In a bend the outside tyres do
- * more of the work (up to `outside` more of the axle's share).
+ * Two thermal layers per tyre (car/tyreThermal.ts). Contact work warms the
+ * surface, with diminishing heat retained during large slides. Load-dependent
+ * flexing also warms the carcass. Exchange is conservative across the layers'
+ * different heat capacities; air, speed and water remove heat. No target-temperature
+ * clamp: sustained abuse can still overheat a set, and easing off lets it recover.
  *
- * Each compound grips best in its window (°C, `window`): below it the tyre
- * loses `cold` of its grip per °C (to no less than `coldFloor`), above it
- * `hot` per °C (to no less than `hotFloor`), and wears faster, by `hotWear`
- * per 10 °C over. Sets go on at `blanket` °C (the tyre blankets; wets and
- * intermediates aren't heated as much); the air is `air` °C in the dry and
- * `wetAir` in the rain.
+ * Grip blends surface and core temperature; an isolated surface spike has a
+ * smaller penalty than a heat-soaked tyre. Thermal wear mainly follows sustained
+ * core heat. Compound response changes warm-up/cool-down speed, not its equilibrium;
+ * the extra squirm of grooved tyres adds heat on a drying track. These are tuned
+ * gameplay coefficients, not measured tyre specifications.
  */
 export const TYRE_TEMP = {
-  coreExchange: 0.025,
-  coreRate: 0.2,
-  coreCool: 0.001,
-  heat: 0.25,
-  roll: 0.05,
-  cool: 0.016,
-  coolSpeed: 30,
-  wetCool: 0.4,
-  outside: 0.3,
+  coreExchange: 0.08,
+  coreRate: 0.24,
+  coreCool: 0.0015,
+  coreFlex: 0.001,
+  heat: 0.17,
+  workSaturation: 45,
+  roll: 0.09,
+  rollSpeed: 45,
+  cool: 0.012,
+  coolSpeed: 25,
+  wetCool: 0.65,
   cold: 0.006,
+  coldSurfaceShare: 0.85,
   coldFloor: 0.78,
-  hot: 0.008,
+  hot: 0.004,
+  surfaceShare: 0.65,
+  flashFrom: 12,
+  flashLoss: 0.0015,
   hotFloor: 0.8,
   hotWear: 0.4,
   air: 26,
   wetAir: 16,
   blanket: { soft: 80, medium: 80, hard: 80, inter: 60, wet: 50 } as Record<Compound, number>,
+  response: { soft: 1.12, medium: 1, hard: 0.82, inter: 1.18, wet: 1.25 } as Record<Compound, number>,
+  drySquirm: { soft: 0, medium: 0, hard: 0, inter: 0.35, wet: 0.7 } as Record<Compound, number>,
   window: { soft: [85, 105], medium: [90, 112], hard: [95, 120], inter: [55, 85], wet: [45, 75] } as Record<Compound, readonly [number, number]>,
 } as const;
 

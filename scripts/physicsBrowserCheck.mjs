@@ -80,6 +80,25 @@ try {
   });assert.deepEqual(reflection,{wetOnlyCached:true,roadChanged:true,rainUpdated:true});
   await page.reload();await page.waitForFunction(()=>window.__game);
   const saved=await page.evaluate(async()=>{const {settings}=await import('/src/core/settings.ts');return{pillar:settings().cockpitPillar,radar:settings().raceRadar,feedback:settings().drivingFeedback};});assert.deepEqual(saved,{pillar:true,radar:false,feedback:false});
+  // The actual race HUD must distinguish a surface spike from heat stored in the carcass.
+  await page.setViewportSize({width:1440,height:900});
+  await page.evaluate(()=>{
+    const g=window.__game;g.start({mode:'practice',opponents:0,weather:'dry',time:'day',tyreWear:true,tyres:'medium'});
+    const r=g.screens.race;r.tick=()=>{};r.car.tyreTemp.splice(0,4,90,124,102,141);r.car.tyreCore.splice(0,4,88,96,98,127);r.frame(0);
+  });
+  await page.getByText('SURFACE / CORE',{exact:true}).waitFor();
+  assert.deepEqual(await page.locator('.tyre-surface').allTextContents(),['90°','124°','102°','141°']);
+  assert.deepEqual(await page.locator('.tyre-core').allTextContents(),['88°','96°','98°','127°']);
+  assert.equal(await page.locator('.tyre-surface').nth(1).getAttribute('data-state'),'warm');
+  assert.equal(await page.locator('.tyre-core').nth(1).getAttribute('data-state'),'ok');
+  await page.screenshot({path:'test-results/tyre-thermal-desktop.png'});
+  await page.setViewportSize({width:844,height:390});
+  const thermalBounds=await page.locator('.tyre-thermal').boundingBox(),speedBounds=await page.locator('.hud-speed').boundingBox();
+  assert.ok(thermalBounds&&speedBounds&&thermalBounds.x>=speedBounds.x&&thermalBounds.x+thermalBounds.width<=speedBounds.x+speedBounds.width&&speedBounds.x+speedBounds.width<=844&&speedBounds.y+speedBounds.height<=390);
+  const hintBounds=await page.locator('.hud-hint').boundingBox();assert.ok(hintBounds&&hintBounds.x+hintBounds.width<=speedBounds.x,'keyboard hint leaves tyre telemetry unobstructed');
+  await page.screenshot({path:'test-results/tyre-thermal-phone.png'});
+  await page.evaluate(()=>{window.__game.screens.race.car.tyreCore[1]=97;});
+  await page.waitForFunction(()=>document.querySelectorAll('.tyre-core')[1].textContent==='97°');
   assert.deepEqual(errors,[]);
-  console.log('Driving browser checks passed: raw braking and aids, per-camera cockpit visibility, both-player proximity warnings, phone layout, saved preferences and wetness reflection reuse.');
+  console.log('Driving browser checks passed: raw braking and aids, per-camera cockpit visibility, both-player proximity warnings, phone layout, saved preferences, wetness reflection reuse and separate surface/core tyre telemetry.');
 }finally{await browser?.close();server.kill();}

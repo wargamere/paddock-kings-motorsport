@@ -1,5 +1,6 @@
 import { HANDLING, SIM } from '../config/handling.ts';
 import { DAMAGE, DEFAULT_SETUP, DRS, ERS, FUEL, SETUP, TYRE_TEMP, TYRES, type CarSetup, type Compound } from '../config/race.ts';
+import { TyreThermal } from './tyreThermal.ts';
 import { clamp } from '../core/math.ts';
 import { locatorFor, type TrackLocator } from '../track/locator.ts';
 import { pitLayout } from '../track/pits.ts';
@@ -263,9 +264,10 @@ export class CarPhysics {
   /** Fuel aboard (kg): the race fills the tank for its distance (FUEL), and it burns off as the car goes. */
   fuel = 0;
   /** Each tyre's temperature (°C): front left, front right, rear left, rear right (see TYRE_TEMP). */
-  readonly tyreTemp = [80, 80, 80, 80];
+  private readonly thermal = new TyreThermal();
+  readonly tyreTemp = this.thermal.surface;
   /** Slower carcass temperature: a hot surface can cool without instantly cooling the whole tyre. */
-  readonly tyreCore = [80, 80, 80, 80];
+  readonly tyreCore = this.thermal.core;
   private readonly track: Track;
   private readonly locator: TrackLocator;
   private readonly obstacles: ObstacleGrid;
@@ -347,12 +349,7 @@ export class CarPhysics {
 
   /** How much of its grip tyre `i` has at its temperature (1 in its window). */
   tyreTempGrip(i: number): number {
-    const T = TYRE_TEMP;
-    const [lo, hi] = T.window[this.compound];
-    const t = this.tyreTemp[i];
-    if (t < lo) return Math.max(T.coldFloor, 1 - T.cold * (lo - t));
-    if (t > hi) return Math.max(T.hotFloor, 1 - T.hot * (t - hi));
-    return 1;
+    return this.thermal.grip(i, this.compound);
   }
 
   /** The share of their grip all four tyres have at their temperatures (the front pair, or the rear, with `axle`). */
@@ -417,8 +414,7 @@ export class CarPhysics {
     this.compound = compound;
     this.tyreAge = 0;
     this.tyreUse = 0;
-    this.tyreTemp.fill(TYRE_TEMP.blanket[compound]);
-    this.tyreCore.fill(TYRE_TEMP.blanket[compound]);
+    this.thermal.reset(compound);
     this.chassis.reset();
   }
 
@@ -617,30 +613,17 @@ export class CarPhysics {
       const laps = (Math.abs(vf) * dt) / this.track.center.length;
       this.tyreAge += laps;
       // (Overheated tyres wear faster.)
-      const over = Math.max(0, this.tyreHeat - TYRE_TEMP.window[this.compound][1]);
+      const over = this.thermal.overheat(this.compound);
       this.tyreUse += (this.wearRate * laps * (1 + T.slideWear * Math.max(0, st.slip - T.slideFrom)) * (1 + (TYRE_TEMP.hotWear * over) / 10)) / this.tyreLife;
     }
   }
 
   /**
-   * The tyres' temperatures for one tick (TYRE_TEMP): the work each did on the
-   * road heats it (the outside ones in a bend more), flexing heats them a
-   * little, and the air cools them. `w`: how much of the full model was in
-   * use (at walking pace, none: no sliding work).
+   * Contact work and load feed the two thermal layers. At walking pace the
+   * full contact solver is blended out, so its sliding work is blended too.
    */
   private heatTyres(vf: number, w: number): void {
-    const T = TYRE_TEMP;
-    const dt = this.dt;
-    const v = Math.abs(vf);
-    const air = T.air + (T.wetAir - T.air) * this.wetness;
-    const cool = T.cool * (1 + v / T.coolSpeed) * (1 + T.wetCool * this.wetness);
-    for (let i = 0; i < 4; i++) {
-      const work = this.chassis.work[i] * w;
-      const t = this.tyreTemp[i];
-      const exchange = (t - this.tyreCore[i]) * T.coreExchange;
-      this.tyreTemp[i] = clamp(t + (T.heat * work + T.roll * v - cool * (t - air) - exchange) * dt, air, 300);
-      this.tyreCore[i] = clamp(this.tyreCore[i] + (exchange * T.coreRate - T.coreCool * (this.tyreCore[i] - air)) * dt, air, 220);
-    }
+    this.thermal.step(this.chassis.work, this.contacts, vf, this.wetness, this.compound, w, this.dt);
   }
 
 
