@@ -95,6 +95,7 @@ try {
   await page.setViewportSize({width:844,height:390});
   const thermalBounds=await page.locator('.tyre-thermal').boundingBox(),speedBounds=await page.locator('.hud-speed').boundingBox();
   assert.ok(thermalBounds&&speedBounds&&thermalBounds.x>=speedBounds.x&&thermalBounds.x+thermalBounds.width<=speedBounds.x+speedBounds.width&&speedBounds.x+speedBounds.width<=844&&speedBounds.y+speedBounds.height<=390);
+  const hintBounds=await page.locator('.hud-hint').boundingBox();assert.ok(hintBounds&&hintBounds.x+hintBounds.width<=speedBounds.x,'keyboard hint leaves tyre telemetry unobstructed');
   await page.screenshot({path:'test-results/tyre-thermal-phone.png'});
   await page.evaluate(()=>{window.__game.screens.race.car.tyreCore[1]=97;});
   await page.waitForFunction(()=>document.querySelectorAll('.tyre-core')[1].textContent==='97°');

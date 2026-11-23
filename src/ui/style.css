@@ -470,6 +470,15 @@ body {
   opacity: 1;
 }
 
+/* Keep the initial keyboard hint clear of the expanded tyre telemetry. */
+@media (max-width: 1200px) {
+  .hud:not(.touch):not(.split) .hud-hint {
+    left: 0.8rem;
+    max-width: calc(100% - 25rem);
+    transform: none;
+  }
+}
+
 /* With touch controls, move the speedometer and hint up, clear of the pads (the speedometer beside the minimap). */
 .hud.touch .hud-speed {
   bottom: auto;
