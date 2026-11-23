@@ -53,6 +53,7 @@ export interface Settings {
   cockpitPillar: boolean;
   raceRadar: boolean;
   drivingFeedback: boolean;
+  practiceTiming: boolean;
   editorMode: 'draw' | 'dots' | 'height';
   /** Dragging a dot also moves its neighbours. */
   softEdit: boolean;
@@ -94,6 +95,7 @@ const DEFAULTS: Settings = {
   cockpitPillar: false,
   raceRadar: true,
   drivingFeedback: true,
+  practiceTiming: true,
   editorMode: 'dots',
   softEdit: true,
   smoothing: 'normal',
@@ -158,7 +160,7 @@ export function settings(): Settings {
   if (!current) {
     const saved = loadJSON<Partial<Settings>>(KEY, {});
     const read: Settings = { ...DEFAULTS, ...saved, assists: cleanAssists(saved.assists), keys: cleanBindings(saved.keys), carSetup: cleanSetup(saved.carSetup) };
-    for (const key of ['cockpitPillar', 'raceRadar', 'drivingFeedback'] as const) read[key] = typeof saved[key] === 'boolean' ? saved[key] : DEFAULTS[key];
+    for (const key of ['cockpitPillar', 'raceRadar', 'drivingFeedback', 'practiceTiming'] as const) read[key] = typeof saved[key] === 'boolean' ? saved[key] : DEFAULTS[key];
     // (Read before the saved data is ready, e.g. on CrazyGames before the SDK has started:
     // used, but not kept, so the real saved settings are read once they're there.)
     if (!storageReady()) return read;
