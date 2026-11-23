@@ -61,6 +61,7 @@ import { formatGap, GapTracker } from './timing.ts';
 import { TimingTower, type TowerRow } from '../ui/timingTower.ts';
 import { scoreFor, type Standing } from './records.ts';
 import { formatDelta, formatTime, RaceSession, type Progress, type RaceEvent } from './session.ts';
+import { LapTiming } from './lapTiming.ts';
 
 const BRAKE: DriveInput = { throttle: 0, brake: 1, steer: 0, handbrake: false };
 /** The pit crew holding the car still (the handbrake, as the brake would reverse it at a standstill). */
@@ -231,6 +232,7 @@ export class RaceScreen implements Screen {
   private car: CarPhysics | null = null;
   private carTrack: Track | null = null;
   private session: RaceSession | null = null;
+  private lapTiming: LapTiming | null = null;
   /** The frame-rate check (see checkFrameRate): racing time and frames counted, and whether it's done. */
   private readonly fpsCheck = { time: 0, frames: 0 };
   private fpsChecked = false;
@@ -468,6 +470,8 @@ export class RaceScreen implements Screen {
   }
 
   exit(): void {
+    this.lapTiming = null;
+    this.hud.timing.root.hidden = true;
     this.hud.driving.clear();
     this.hud2.driving.clear();
     this.model?.setCockpitView(false);
@@ -629,6 +633,9 @@ export class RaceScreen implements Screen {
   /** What every new run (or qualifying session) resets. */
   private resetRun(): void {
     const def = this.game.track.def;
+    if (this.game.mode !== 'practice' || !this.lapTiming || this.lapTiming.length !== this.game.track.center.length) this.lapTiming = new LapTiming(this.game.track.center.length);
+    this.lapTiming.cancel();
+    this.hud.timing.root.hidden = true;
     this.drs = null;
     this.fx?.clear();
     this.fxHits.fill(0);
@@ -782,6 +789,7 @@ export class RaceScreen implements Screen {
       const p2 = this.p2;
       const s = p2?.ai.session;
       if (!p2 || !s?.canDrive || s.retired || s.phase === 'finished') return;
+      s.invalidateLap();
       p2.ai.car.resetToRoad();
       p2.ai.crew?.reset(p2.ai.car.state);
       this.drs?.forget(this.opponents.indexOf(p2) + 1);
@@ -1170,6 +1178,8 @@ export class RaceScreen implements Screen {
 
   private resetCar(): void {
     if (!this.car || !this.session?.canDrive || this.session.retired || this.watching) return;
+    if (this.session.invalidateLap()) this.hud.flash(STR.lapTiming.reset, 'bad', 2);
+    this.lapTiming?.invalidate();
     // (Broken down in practice: a fresh car.)
     if (this.car.broken) {
       this.car.repair();
@@ -1290,6 +1300,11 @@ export class RaceScreen implements Screen {
     // (Your session's clock is the race's: it keeps running when your own race is over.)
     session.step(prev, this.progress(), this.events);
     for (const e of this.events) this.onRaceEvent(e);
+    if (session.phase === 'racing' && session.lapStart !== null) {
+      if (session.lapSpoilt) this.lapTiming?.invalidate();
+      if (car.state.inPits) this.lapTiming?.invalidate('pit');
+      this.lapTiming?.advance(car.state.s, session.tick * session.dt - session.lapStart);
+    }
     this.opponents.forEach((o, k) => {
       if (this.gone[k + 1]) return;
       this.aiEvents.length = 0;
@@ -1552,6 +1567,7 @@ export class RaceScreen implements Screen {
   private onRaceEvent(e: RaceEvent): void {
     const s = this.session!;
     const lapStarted = () => {
+      this.lapTiming?.begin(s.best?.reference ?? null);
       // Ghost: the best lap so far (if it's switched on); recorder: this new lap.
       this.ghost = this.game.setup.ghost ? this.game.records.get(this.game.track.def.id).ghost : null;
       this.recorder.start(s.tick * s.dt - (s.lapStart ?? 0));
@@ -1573,6 +1589,9 @@ export class RaceScreen implements Screen {
         if (e.delta !== null) this.hud.showSplit(formatDelta(e.delta), e.delta < 0);
         break;
       case 'lap': {
+        if (this.car?.state.inPits) this.lapTiming?.invalidate('pit');
+        const reference = this.lapTiming?.finish(e.time, e.valid);
+        if (e.best && s.best && reference) s.best.reference = reference;
         if (e.valid && this.game.event?.session === 'practice') this.game.event.practised?.(e.time);
         const rec = this.game.records.get(this.game.track.def.id);
         if (e.best) {
@@ -2001,6 +2020,8 @@ export class RaceScreen implements Screen {
     if (s.lastLap !== null) parts.push(`${STR.race.last} ${formatTime(s.lastLap)}`);
     if (s.best) parts.push(`${STR.race.best} ${formatTime(s.best.time)}`);
     this.hud.setLastBest(parts.join(' · '));
+    const showTiming = settings().practiceTiming && !this.p2 && !this.watching && this.stage !== 'grid' && (this.game.mode === 'practice' || this.stage === 'qualifying') && s.lapStart !== null;
+    this.hud.timing.update(showTiming ? this.lapTiming : null, s.phase === 'finished' ? this.game.track.center.length : this.car?.state.s ?? 0, s.lapTime() ?? 0);
     // Flags: the safety car, the pit limiter, or yellow flags here or just ahead.
     const control = this.control;
     const car = this.car;
@@ -2183,7 +2204,7 @@ export class RaceScreen implements Screen {
     this.awarenessCars.length = 0;
     if (!this.gone[0]) this.awarenessCars.push(this.view);
     this.opponents.forEach((o, k) => { if (!this.gone[k + 1]) this.awarenessCars.push(o.view); });
-    if (!this.paused && !this.watching && session.phase === 'racing' && this.stage === 'run' && !this.gone[0]) this.hud.driving.update(this.view, this.awarenessCars, car, dt, preferences.raceRadar, preferences.drivingFeedback);
+    if (!this.paused && !this.watching && session.phase === 'racing' && this.stage !== 'grid' && !this.gone[0]) this.hud.driving.update(this.view, this.awarenessCars, car, dt, preferences.raceRadar, preferences.drivingFeedback);
     else this.hud.driving.clear();
     if (this.p2 && !this.paused && this.p2.ai.session.phase === 'racing' && this.stage === 'run') this.hud2.driving.update(this.p2.view, this.awarenessCars, this.p2.ai.car, dt, preferences.raceRadar, preferences.drivingFeedback);
     else this.hud2.driving.clear();

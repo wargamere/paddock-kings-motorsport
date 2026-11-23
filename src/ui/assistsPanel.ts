@@ -41,6 +41,7 @@ export class AssistsPanel {
   private readonly pillar: Choice<boolean>;
   private readonly radar: Choice<boolean>;
   private readonly feedback: Choice<boolean>;
+  private readonly timing: Choice<boolean>;
   private onClose: () => void = () => {};
 
   constructor() {
@@ -88,6 +89,7 @@ export class AssistsPanel {
     this.pillar = onOff((v) => { updateSettings({ cockpitPillar: v }); this.render(); });
     this.radar = onOff((v) => { updateSettings({ raceRadar: v }); this.render(); });
     this.feedback = onOff((v) => { updateSettings({ drivingFeedback: v }); this.render(); });
+    this.timing = onOff((v) => { updateSettings({ practiceTiming: v }); this.render(); });
     this.abs = onOff((v) => set({ abs: v }));
     this.tc = segmented<Assists['tc']>(
       [
@@ -125,6 +127,7 @@ export class AssistsPanel {
       field(STR.driving.pillar, this.pillar.el, STR.driving.pillarHint),
       field(STR.driving.radar, this.radar.el, STR.driving.radarHint),
       field(STR.driving.feedback, this.feedback.el, STR.driving.feedbackHint),
+      field(STR.lapTiming.setting, this.timing.el, STR.lapTiming.hint),
       h('div', { class: 'menu row' }, button(A.done, () => this.close(), { icon: '✓', class: 'primary', key: 'Esc' })),
     );
     panel.setAttribute('role', 'dialog');
@@ -167,6 +170,7 @@ export class AssistsPanel {
     this.pillar.set(settings().cockpitPillar);
     this.radar.set(settings().raceRadar);
     this.feedback.set(settings().drivingFeedback);
+    this.timing.set(settings().practiceTiming);
     // The gear keys as you have them.
     const keys = settings().keys;
     this.gearsHint.textContent = fmt(STR.assists.gearsHint, { up: keysText(keys, 'gearUp') || '—', down: keysText(keys, 'gearDown') || '—' });

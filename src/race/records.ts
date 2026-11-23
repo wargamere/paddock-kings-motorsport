@@ -3,6 +3,7 @@ import { loadJSON, saveJSON, storage } from '../platform/storage.ts';
 import { decodeGhost, encodeGhost, type GhostLap } from './ghost.ts';
 import { AUTHOR_VERSION } from './medals.ts';
 import type { BestLap } from './session.ts';
+import { cleanLapReference } from './lapTiming.ts';
 
 /** Personal bests for one track. */
 export interface TrackRecord {
@@ -93,6 +94,14 @@ export const GHOST_BUDGET = 450_000;
 const INDEX_KEY = 'records.index';
 const key = (id: string) => `records.${id}`;
 
+/** Retain old best times even when their optional telemetry is absent or damaged. */
+function cleanBest(raw: BestLap | null | undefined): BestLap | null {
+  if (!raw || !Number.isFinite(raw.time) || raw.time <= 0 || raw.time > 86400) return null;
+  const splits = Array.isArray(raw.splits) && raw.splits.length <= 9 && raw.splits.every((t,i,a) => Number.isFinite(t) && t >= 0 && t <= raw.time && (i === 0 || t >= a[i-1])) ? [...raw.splits] : [];
+  const reference = cleanLapReference(raw.reference, raw.time);
+  return { time: raw.time, splits, ...(reference ? { reference } : {}) };
+}
+
 /**
  * Personal bests and ghosts per track id, saved through the platform storage
  * (localStorage on the web, the SDK data module on CrazyGames).
@@ -105,7 +114,7 @@ export class RecordBook {
     if (r) return r;
     const s = loadJSON<StoredRecord | null>(key(id), null);
     r = {
-      best: s?.best && typeof s.best.time === 'number' ? s.best : null,
+      best: cleanBest(s?.best),
       bestScore: s?.scoreV === 2 && typeof s.bestScore === 'number' ? s.bestScore : 0,
       ghost: s?.ghost ? decodeGhost(s.ghost) : null,
       author: storedAuthor(s),
@@ -120,7 +129,7 @@ export class RecordBook {
     if (r) return { best: r.best, bestScore: r.bestScore, author: r.author };
     const s = loadJSON<StoredRecord | null>(key(id), null);
     return {
-      best: s?.best && typeof s.best.time === 'number' ? s.best : null,
+      best: cleanBest(s?.best),
       bestScore: s?.scoreV === 2 && typeof s.bestScore === 'number' ? s.bestScore : 0,
       author: storedAuthor(s),
     };

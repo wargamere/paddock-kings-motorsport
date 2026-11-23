@@ -6,6 +6,14 @@ export const STR = {
   /** Working title — change it here and it updates everywhere. */
   gameName: 'Paddock Kings: Motorsport',
   tagline: 'Dream it. Build it. Race it.',
+  lapTiming: {
+    setting: 'Live practice timing',
+    hint: 'Live delta, three sectors and a session optimal lap in practice and qualifying. Complete a clean lap to set a reference.',
+    personal: 'PERSONAL BEST', session: 'SESSION BEST', first: 'SET A CLEAN LAP', invalid: 'LAP INVALID', pit: 'PIT LAP', back: 'REJOIN LAP',
+    sectors: ['S1', 'S2', 'S3'], optimal: 'OPTIMAL',
+    optimalHint: 'Fastest sectors from completed clean laps in this session.',
+    reset: 'Car reset · this lap’s time will not count',
+  },
   driving: {
     visibility: 'Visibility & feedback',
     pillar: 'Cockpit centre pillar',
@@ -993,8 +1001,8 @@ export const STR = {
     practiceLap: 'PRACTICE · LAP {n}',
     practiceGo: 'Practice — drive when ready',
     trackLimits: 'Track limits! This lap won’t count',
-    trackLimitsShort: 'Lap invalid: track limits',
-    lapCut: 'Lap {n}: {time} — invalid (track limits)',
+    trackLimitsShort: 'Lap time invalid',
+    lapCut: 'Lap {n}: {time} — invalid lap',
     lapMissed: 'Lap {n}: {time} — invalid (missed a checkpoint)',
     missedCheckpoint: 'Missed a checkpoint! This lap’s time won’t count',
     trackInfo: '{name} · {len} m',

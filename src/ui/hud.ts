@@ -6,6 +6,7 @@ import { formatTime } from '../race/session.ts';
 import { button, h } from './dom.ts';
 import { Minimap } from './minimap.ts';
 import { DrivingIndicators } from './drivingIndicators.ts';
+import { LapTimingPanel } from './lapTimingPanel.ts';
 
 export interface HudActions {
   drawTrack(): void;
@@ -23,6 +24,7 @@ export type FlashKind = 'info' | 'good' | 'bad' | 'big';
  */
 export class Hud {
   readonly driving = new DrivingIndicators();
+  readonly timing = new LapTimingPanel();
   readonly root: HTMLElement;
   private readonly info: HTMLElement;
   private readonly lapLabel: HTMLElement;
@@ -107,7 +109,7 @@ export class Hud {
     this.posValue = h('span', { class: 'pos-value' });
     this.pos = h('div', { class: 'hud-pos' }, h('span', { class: 'pos-label', text: STR.race.position }), this.posValue);
     this.pos.hidden = true;
-    const timer = h('div', { class: 'hud-timer' }, this.pos, this.lapLabel, this.time, this.lastBest, this.medals, this.split);
+    const timer = h('div', { class: 'hud-timer' }, this.pos, this.lapLabel, this.time, this.lastBest, this.medals, this.split, this.timing.root);
     this.center = h('div', { class: 'hud-center' });
     this.speedValue = h('span', { class: 'speed-value', text: '0' });
     this.speedUnit = h('span', { class: 'speed-unit', text: STR.race.speedUnit });
@@ -198,7 +200,7 @@ export class Hud {
     }
   }
 
-  /** Marks the lap being driven as invalid (track limits). */
+  /** Marks the lap being driven as invalid (track limits, checkpoint or reset). */
   setCut(on: boolean): void {
     if (this.cut === on) return;
     this.cut = on;

@@ -1,6 +1,7 @@
 import { HANDLING } from '../config/handling.ts';
 import { RACE } from '../config/race.ts';
 import { clamp } from '../core/math.ts';
+import type { LapReference } from './lapTiming.ts';
 
 export type RacePhase = 'countdown' | 'racing' | 'finished';
 
@@ -39,6 +40,8 @@ export interface BestLap {
   time: number;
   /** Time at each checkpoint (excluding the finish). */
   splits: number[];
+  /** Time at equal distances on this best lap (older saves may have only checkpoint splits). */
+  reference?: LapReference;
 }
 
 /**
@@ -70,12 +73,19 @@ export class RaceSession {
   readonly laps: number[] = [];
   /** Per completed lap: false if track limits were broken or a checkpoint missed on it. */
   readonly lapValid: boolean[] = [];
-  /** Track limits were broken on the lap being driven. */
+  /** Track limits were broken, or the player reset the car on this lap. */
   cut = false;
 
-  /** The lap being driven won't count for its time (track limits, or a missed checkpoint). */
+  /** The lap being driven won't count for its time (track limits, reset, or a missed checkpoint). */
   get lapSpoilt(): boolean {
     return this.cut || this.missed;
+  }
+
+  /** A manual car reset must not produce a personal best or a valid qualifying lap. */
+  invalidateLap(): boolean {
+    if (this.phase !== 'racing' || this.lapStart === null || this.cut) return false;
+    this.cut = true;
+    return true;
   }
   private offTicks = 0;
   lastLap: number | null = null;

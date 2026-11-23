@@ -324,7 +324,9 @@ Both are plain data written by `node scripts/buildTracks.ts <path to a checkout 
 
 Start (Enter) drives it. All of it except the laps is remembered between visits. "Race again" on the results screen reruns the same setup (qualifying again, or a new random draw). Restart in the pause menu restarts the race from the same grid.
 
-**Practice** starts at once, no countdown and no AI cars, as many laps as you like. Lap times, splits, the ghost and personal bests work as in a race, but there's no lap limit and no results screen. Press **R twice quickly** (within 0.5 s, or gamepad Back twice) to restart the lap from the grid; a single R just puts the car back on the road.
+**Practice** starts at once, no countdown and no AI cars, as many laps as you like. Lap times, splits, the ghost and personal bests work as in a race, but there's no lap limit and no results screen. Press **R twice quickly** (within 0.5 s, or gamepad Back twice) to restart the lap from the grid; a single R puts the car back on the road and invalidates the current lap's time.
+
+**Live practice timing** also appears in qualifying: a delta against your personal best at the same track distance, three equal-distance sectors, and an optimal lap combining the fastest sectors from completed clean laps in the current session. Negative/green means faster; positive/red means slower. Older personal bests are preserved: if they have no timing profile, your first clean session lap becomes the reference until a new personal best records one. Invalid laps and pit laps cannot improve the session optimal. Reversing hides the live delta until you regain your earlier progress. Practice retries keep the session optimal; leaving the track clears it. Switch the display off in **Assists → Visibility & feedback → Live practice timing**. `npm run test:timing:browser` checks real player-physics laps, saved profiles, resets, qualifying and the phone layout.
 
 The pause menu has Restart (Back to the grid in practice), Race settings and Main menu; the editor's ✕ (and Esc) and My tracks' Back return to the menu. The editor's Practice button still drives straight away, to try a track out.
 
