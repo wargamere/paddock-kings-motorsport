@@ -244,9 +244,15 @@ export const INPUT = {
   steering: {
     slowSpeed: 20,
     fastSpeed: 85,
-    riseSlow: 0.22,
+    riseSlow: 0.30,
     riseFast: 0.42,
     release: 0.12,
+    reversal: 0.105,
+    /** Fraction of normal rise time when changing direction from full lock. */
+    chicaneRiseScale: 0.70,
+    /** Initial fraction of the digital ramp's slope, and travel where the normal ramp takes over. */
+    tapGain: 0.12,
+    blendTravel: 0.84,
     fastAuthority: 0.55,
     stickExponent: 1.7,
     stickResponse: 0.035,

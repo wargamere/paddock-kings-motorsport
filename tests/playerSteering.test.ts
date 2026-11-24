@@ -23,7 +23,7 @@ test('short high-speed key taps are progressive, release promptly, and retain fu
   const first = s.sample(1, 0, 300 / 3.6, dt);
   assert.ok(first > 0 && first < .02);
   const tap = hold(s, 1, 0, 300 / 3.6, .1);
-  assert.ok(tap > .08 && tap < .18, `a small correction: ${tap}`);
+  assert.ok(tap > .025 && tap < .05, `a small correction: ${tap}`);
   assert.equal(hold(s, 0, 0, 300 / 3.6, .15), 0);
   assert.equal(hold(s, 1, 0, 8, .4), 1, 'hairpins and pit manoeuvres retain full range');
   assert.equal(hold(s, -1, 0, 8, .4), -1);
@@ -106,7 +106,7 @@ test('gamepad stick and D-pad receive their own analog/digital shaping, includin
     im.clear(); pad.axes[0] = 0; buttons[15].pressed = true;
     im.pollGamepad();
     for (let i = 0; i < 12; i++) im.sample(out, 85);
-    assert.ok(out.steer > .08 && out.steer < .18, 'D-pad behaves like a gradual key press');
+    assert.equal(out.steer, hold(new PlayerSteering(), 1, 0, 85, .1), 'D-pad matches a 100 ms key press');
     assert.equal(im.lastDevice, 'gamepad');
     connected = false; im.pollGamepad();
     for (let i = 0; i < 60; i++) im.sample(out, 85);
@@ -145,6 +145,6 @@ test('actual 300 km/h physics: a brief tap gives a small lane correction instead
   const raw = run(false), smooth = run(true);
   assert.ok(smooth.peakYaw < raw.peakYaw * .5, JSON.stringify({ raw, smooth }));
   assert.ok(smooth.peakYawAcceleration < raw.peakYawAcceleration * .5);
-  assert.ok(smooth.lateral > .1 && smooth.lateral < 1.5, JSON.stringify(smooth));
+  assert.ok(smooth.lateral > .1 && smooth.lateral < .35, JSON.stringify(smooth));
   context.diagnostic(JSON.stringify({ raw, smooth }));
 });
