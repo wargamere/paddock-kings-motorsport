@@ -59,7 +59,7 @@ export function newTrackId(): string {
  */
 export function contentId(control: readonly Dot[], options?: Partial<TrackOptions>, extras?: TrackExtras): string {
   // Heights and bank overrides only appear when set, so older tracks keep their ids.
-  const dots = control.map((p) => (p.h ? `${p.x},${p.y},${p.h}` : `${p.x},${p.y}`) + (p.b !== undefined ? `/${p.b}` : '')).join(';');
+  const dots = control.map((p) => (p.h ? `${p.x},${p.y},${p.h}` : `${p.x},${p.y}`) + (p.b !== undefined ? `/${p.b}` : '') + (p.bank !== undefined ? `@${p.bank}` : '')).join(';');
   const o = { ...DEFAULT_OPTIONS, ...options };
   const extra = (Object.keys(DEFAULT_OPTIONS) as (keyof TrackOptions)[])
     .filter((k) => o[k] !== DEFAULT_OPTIONS[k])

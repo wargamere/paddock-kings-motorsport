@@ -19,7 +19,7 @@ test('team performance changes actual launch acceleration and driven qualifying 
   const t = track('world-it-1922'), setup = suggestedSetup(t);
   const launch = (tune: typeof weak) => {
     const car = new CarPhysics(t); car.tune = tune; car.placeAt(0);
-    for (let i = 0; i < 120; i++) car.step({ throttle: 1, brake: 0, steer: 0, handbrake: false });
+    for (let i = 0; i < 360; i++) car.step({ throttle: 1, brake: 0, steer: 0, handbrake: false });
     return car.state.speed;
   };
   assert.ok(launch(weak) < launch(STANDARD_CAR) * .8, 'a weak engine loses acceleration under identical inputs');

@@ -7,6 +7,7 @@ import { carPace, roadPace } from '../../src/race/racingLine.ts';
 import { suggestedSetup } from '../../src/race/strategy.ts';
 import { along } from '../../src/race/traffic.ts';
 import type { Track } from '../../src/track/track.ts';
+import { CONTACT } from '../../src/config/race.ts';
 import { brakingBends } from './traffic.ts';
 
 /** A player who follows its own line and leaves room for an observed overlap;
@@ -52,7 +53,7 @@ export function approachBattle(track: Track, options: { mode: 'attack' | 'defend
     lastHit = hit > 0; if (me.offTrack || human.offTrack) off++;
     const action = bot.racecraft; actions[action] = (actions[action] ?? 0) + 1;
     finalGap = along(me.s, human.s, L); minGap = Math.min(minGap, finalGap);
-    alongside = Math.abs(finalGap) < 4.2 && Math.abs(side) > 1.9 ? alongside + 1 / 120 : 0; peakAlongside = Math.max(peakAlongside, alongside);
+    alongside = Math.abs(finalGap) < 2 * CONTACT.halfLength && Math.abs(side) > 2 * CONTACT.halfWidth ? alongside + 1 / 120 : 0; peakAlongside = Math.max(peakAlongside, alongside);
     if (along(bend.apex, me.s, L) > exit && along(bend.apex, me.s, L) < L / 3) break;
   }
   return { track: track.def.id, mode, actions, finalGap, minGap, contacts, hard, off, peakAlongside, ...(record ? {trace} : {}) };

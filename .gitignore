@@ -5,3 +5,4 @@ dist/
 test-results/
 crazygames-out/
 training/runs/
+data/circuits/*.geojson

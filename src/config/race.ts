@@ -1,3 +1,5 @@
+import { FORMULA_DIMENSIONS } from './handling.ts';
+
 /** Time-trial rules. */
 /** Graphics on a slow computer: Full drops to Fast if the first checkSeconds of racing average under minFps. */
 export const GRAPHICS = { checkSeconds: 6, minFps: 28 } as const;
@@ -476,7 +478,7 @@ export const AI = {
   /** The field spreads out below the chosen difficulty by up to this much (0.08 = 8 points). */
   spread: 0.08,
   /** Grid: metres between slots along the track, and how far each slot is off the centre line. */
-  gridGap: 6.5,
+  gridGap: 8,
   gridLateral: 2.2,
   /** First slot's distance behind the line. */
   gridFront: 8,
@@ -496,8 +498,8 @@ export const AI = {
 /** Car-to-car contact (car/contact.ts). */
 export const CONTACT = {
   /** The car's body as a box: half its length and half its width (m). */
-  halfLength: 2.1,
-  halfWidth: 0.95,
+  halfLength: FORMULA_DIMENSIONS.length / 2,
+  halfWidth: FORMULA_DIMENSIONS.width / 2,
   /** Bounce (share of the closing speed) and sliding friction between the bodies. */
   restitution: 0.2,
   friction: 0.35,
@@ -615,7 +617,7 @@ export const TRAFFIC = {
   keepGap: 0.9,
   keepReach: 1,
   /** …and a car behind counts as beside it once less than this far back (m, centre to centre: its nose past our rear wheels), plus this many seconds of the speed it's closing at. */
-  keepBehind: 3,
+  keepBehind: CONTACT.halfLength + FORMULA_DIMENSIONS.wheelbase / 2,
   keepClosing: 0.6,
   /** Counter a developing sideways drift before the car reaches its neighbour. */
   keepDriftTime: .25,
@@ -671,8 +673,8 @@ export const TRAFFIC = {
   letByGap: 25,
   letByAfter: 1.5,
   letByOffset: 3.5,
-  letByHold: 8,
-  letByEase: 0.85,
+  letByHold: 10.5,
+  letByEase: 0.82,
   letByThrottle: 0.5,
   /** Only this far (m) into the race, and not while queued behind someone itself. The quicker car is put off passing on the side it's moved to by this (s). */
   letByFrom: 200,

@@ -94,7 +94,7 @@ export const GHOST_BUDGET = 450_000;
 const INDEX_KEY = 'records.index';
 const key = (id: string) => `records.${id}`;
 /** Old compact-circuit records remain stored under their original ids. */
-const recordId = (id:string) => id.startsWith('world-') ? `full-v1/${id}` : id;
+const recordId = (id:string) => id.startsWith('world-') ? `terrain-v2/${id}` : id;
 
 /** Retain old best times even when their optional telemetry is absent or damaged. */
 function cleanBest(raw: BestLap | null | undefined): BestLap | null {

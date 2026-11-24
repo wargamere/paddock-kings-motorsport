@@ -1,13 +1,12 @@
 import { BoxGeometry, BufferGeometry, CylinderGeometry, Float32BufferAttribute, PlaneGeometry, Quaternion, SphereGeometry, Vector3 } from 'three';
-import { HANDLING } from '../config/handling.ts';
+import { FORMULA_DIMENSIONS, HANDLING } from '../config/handling.ts';
 import { merge, tint } from '../render/geom.ts';
 import type { DamageLook } from './model.ts';
 
 /**
  * An open-wheel formula car, built from simple solids. Local axes as the rest
  * of car/model.ts: +Z forward, +X to the car's left, +Y up. It keeps the
- * saloon's footprint (wheels at the same hubs, about 4.5 m long and 2 m wide
- * over the wings), so the physics, collisions and effects line up exactly.
+ * modern formula-car dimensions (5.6 m long, 2 m wide, 3.6 m wheelbase).
  *
  * Parts: the painted bodywork (nose, tub, sidepods, engine cover); the
  * livery's second colour (stripes, see setPaint); the carbon trim (floor,
@@ -30,6 +29,19 @@ const CARBON_LIGHT = 0x2a2d33;
 const PLANK = 0x3a2e22;
 const HELMET = 0xf3f3f1;
 const VISOR = 0x0b0d12;
+
+/** Preserve tyre size and overhangs while extending the chassis between its axles. */
+export function formulaZ(z: number): number {
+  const axle = FORMULA_DIMENSIONS.wheelbase / 2, end = FORMULA_DIMENSIONS.length / 2;
+  return z >= 1.3 ? axle + (z - 1.3) * (end - axle) / (2.33 - 1.3)
+    : z <= -1.32 ? -axle + (z + 1.32) * (end - axle) / (2.2 - 1.32)
+    : z >= 0 ? z * axle / 1.3 : z * axle / 1.32;
+}
+function sized(g: BufferGeometry): BufferGeometry {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) p.setZ(i, formulaZ(p.getZ(i)));
+  p.needsUpdate = true; g.computeVertexNormals(); return g;
+}
 
 /**
  * A solid lofted through cross-sections (four corners each), flat shaded,
@@ -120,7 +132,7 @@ export function formulaPaint(): BufferGeometry {
       { z: -1.2, w: 0.1, y0: 0.08, y1: 0.38, tw: 0.07, x: s * 0.36 },
     ]),
   );
-  return merge([nose, tub, cover, fin, ...pods]);
+  return sized(merge([nose, tub, cover, fin, ...pods]));
 }
 
 /** The livery's second colour: a stripe down the nose and the engine cover, and the sidepod tops. */
@@ -141,7 +153,7 @@ export function formulaAccent(): BufferGeometry {
       { z: -0.55, w: 0.1, y0: 0.552, y1: 0.562, x: s * 0.6 },
     ]),
   );
-  return merge([noseStripe, coverStripe, ...podTops]);
+  return sized(merge([noseStripe, coverStripe, ...podTops]));
 }
 
 const trimCache = new Map<string, BufferGeometry>();
@@ -227,33 +239,33 @@ export function formulaTrim(look: DamageLook, clearCockpit = false): BufferGeome
     }
     box(0.18, 0.02, 0.3, 0.05, 0.47, 1.6, 0x45474d);
   }
-  const g = merge(parts);
+  const g = sized(merge(parts));
   trimCache.set(key, g);
   return g;
 }
 
 /** Lamps: small lights at the nose (for night races) and the rain light at the back. */
 export function formulaLamps(): BufferGeometry {
-  return merge([
+  return sized(merge([
     ...both((s) => tint(new BoxGeometry(0.06, 0.04, 0.04).translate(s * 0.08, 0.3, 2.27), 0xfff6d0)),
     tint(new BoxGeometry(0.16, 0.07, 0.03).translate(0, 0.36, -2.21), 0xd8202a),
-  ]);
+  ]));
 }
 
 /** Their glows at night: white at the front, red at the back. */
 export function formulaGlows(): BufferGeometry {
-  return merge(
+  return sized(merge(
     [tint(new PlaneGeometry(1.0, 0.55).translate(0, 0.3, 2.32), 0xfff1c8), tint(new PlaneGeometry(0.9, 0.55).rotateY(Math.PI).translate(0, 0.36, -2.24), 0xff2a2a)],
     true,
-  );
+  ));
 }
 
 /** A wheel: a wide slick on a dark rim with a bright hub nut (the same for all four). */
 export function formulaWheel(): BufferGeometry {
   const r = HANDLING.wheelRadius;
   return merge([
-    tint(new CylinderGeometry(r, r, 0.36, 18).rotateZ(Math.PI / 2), 0x151517),
-    tint(new CylinderGeometry(r * 0.66, r * 0.66, 0.37, 14).rotateZ(Math.PI / 2), 0x2c2e33),
-    tint(new CylinderGeometry(r * 0.13, r * 0.13, 0.39, 6).rotateZ(Math.PI / 2), 0xc9ccd2),
+    tint(new CylinderGeometry(r, r, 0.34, 18).rotateZ(Math.PI / 2), 0x151517),
+    tint(new CylinderGeometry(r * 0.66, r * 0.66, 0.35, 14).rotateZ(Math.PI / 2), 0x2c2e33),
+    tint(new CylinderGeometry(r * 0.13, r * 0.13, 0.37, 6).rotateZ(Math.PI / 2), 0xc9ccd2),
   ]);
 }

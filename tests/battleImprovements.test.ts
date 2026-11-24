@@ -13,7 +13,9 @@ test('duelling on the same racing line does not invent phantom braking corners',
     for (let s = 0; s < t.center.length; s += 5) assert.ok(d.pathLimit(s, x => d.lateralAt(x)) > d.limitAt(s) * .8, `${id} at ${s}`);
   }
 });
-for (const [id, approach] of [['world-au-1953', 260], ['world-gb-1948', 260]] as const) {
+// Silverstone's wider, elevated layout needs an earlier rolling setup so the
+// full-length cars have room to establish their lanes before the first braking zone.
+for (const [id, approach] of [['world-au-1953', 260], ['world-gb-1948', 380]] as const) {
   test(`${id}: a stronger AI car races a slower player car at full pace instead of staying in its wake`, () => {
     // Deliberately slow traffic fixture, independent of career balance values.
     const run = approachBattle(circuit(id), { mode: 'attack', approach, playerDifficulty: 1, playerHardware: { grip: .76, pull: .712, top: .88 } });

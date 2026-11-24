@@ -20,10 +20,10 @@ import {
   SpotLight,
   Vector3,
 } from 'three';
-import { GRAPHICS3D, HANDLING } from '../config/handling.ts';
+import { FORMULA_DIMENSIONS, GRAPHICS3D, HANDLING } from '../config/handling.ts';
 import { DAMAGE_LOOK } from '../config/race.ts';
 import { merge, tint } from '../render/geom.ts';
-import { formulaAccent, formulaGlows, formulaLamps, formulaPaint, formulaTrim, formulaWheel } from './formula.ts';
+import { formulaAccent, formulaGlows, formulaLamps, formulaPaint, formulaTrim, formulaWheel, formulaZ } from './formula.ts';
 import type { CarState } from './physics.ts';
 
 /** Which car: the open-wheel formula car everyone races, or the saloon (the safety car). */
@@ -202,6 +202,12 @@ const WHEELS: [number, number, number][] = [
   [0.86, HANDLING.wheelRadius, -1.32],
   [-0.86, HANDLING.wheelRadius, -1.32],
 ];
+const FORMULA_WHEELS: [number, number, number][] = [
+  [HANDLING.halfTrack, HANDLING.wheelRadius, HANDLING.wheelBase / 2],
+  [-HANDLING.halfTrack, HANDLING.wheelRadius, HANDLING.wheelBase / 2],
+  [HANDLING.halfTrack, HANDLING.wheelRadius, -HANDLING.wheelBase / 2],
+  [-HANDLING.halfTrack, HANDLING.wheelRadius, -HANDLING.wheelBase / 2],
+];
 
 /** The player's car: paint body, dark trim, four instanced wheels and a blob shadow (4 draw calls). */
 export class CarModel {
@@ -260,7 +266,7 @@ export class CarModel {
     if (formula && !ghost) {
       // The steering wheel, in front of the driver, leaning back towards them.
       const wheel = new Group();
-      wheel.position.set(0, 0.68, 0.56);
+      wheel.position.set(0, 0.68, formulaZ(0.56));
       wheel.rotation.x = 0.5;
       const grip = new Mesh(new BoxGeometry(0.27, 0.12, 0.035), trimMat);
       const left = new Mesh(new BoxGeometry(0.045, 0.15, 0.05).translate(0.14, -0.01, 0), trimMat);
@@ -278,7 +284,7 @@ export class CarModel {
     this.wheels.instanceMatrix.setUsage(DynamicDrawUsage);
     if (!ghost) {
       const shadow = new Mesh(
-        new PlaneGeometry(formula ? 2.1 : 2.4, formula ? 5.2 : 4.8).rotateX(-Math.PI / 2),
+        new PlaneGeometry(formula ? 2.1 : 2.4, formula ? FORMULA_DIMENSIONS.length + .5 : 4.8).rotateX(-Math.PI / 2),
         // (A soft contact shadow under the car; the sun's shadow falls beside it.)
         new MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false, opacity: formula ? GRAPHICS3D.contactShadowFormula : GRAPHICS3D.contactShadow }),
       );
@@ -434,7 +440,7 @@ export class CarModel {
   }
 
   private placeWheels(steerAngle: number, spin: number): void {
-    WHEELS.forEach(([x, y, z], i) => {
+    (this.kind === 'formula' ? FORMULA_WHEELS : WHEELS).forEach(([x, y, z], i) => {
       const steer = i < 2 ? -steerAngle : 0; // + steer = right = towards local -X
       this.q.setFromAxisAngle(this.axisY, steer).multiply(this.qs.setFromAxisAngle(this.axisX, spin));
       this.m.compose(this.v.set(x, y, z), this.q, this.one);

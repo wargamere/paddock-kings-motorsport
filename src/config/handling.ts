@@ -2,6 +2,9 @@
  * Every car-handling tuning constant. Units: metres, seconds, radians.
  * Accelerations are in m/s² (9.81 = 1 g).
  */
+/** Modern 2025-style formula-car envelope, in metres. */
+export const FORMULA_DIMENSIONS = { length: 5.6, width: 2, wheelbase: 3.6 } as const;
+
 export const HANDLING = {
   /** Physics runs at this fixed rate, whatever the display refresh rate. */
   tickRate: 120,
@@ -65,11 +68,11 @@ export const HANDLING = {
   /** Front-wheel angle at a standstill. */
   maxSteerAngle: 0.6,
   /** Steering lock shrinks with speed: limit = maxSteerAngle / (1 + speed / steerFalloff). */
-  steerFalloff: 15,
+  steerFalloff: 25,
   /** How fast the wheels turn towards the input, and back to centre. */
   steerRate: 3.0,
   steerReturnRate: 5.0,
-  wheelBase: 2.6,
+  wheelBase: FORMULA_DIMENSIONS.wheelbase,
   /** How quickly the car's rotation follows the steering (1/s). */
   yawResponse: 9,
 
@@ -136,7 +139,7 @@ export const HANDLING = {
   /** Collision radius of the car (against tree trunks). */
   carRadius: 1.1,
   /** Half the distance between left and right wheels (for the on-grass test). */
-  halfTrack: 0.85,
+  halfTrack: 0.82,
   wheelRadius: 0.36,
   /** The car can't leave this square around the origin. */
   worldLimit: 900,
@@ -258,9 +261,9 @@ export const INPUT = {
 
 export const CAMERA = {
   chase: {
-    distance: 7.2,
+    distance: 6.8,
     /** Extra distance per m/s of speed. */
-    distancePerSpeed: 0.035,
+    distancePerSpeed: 0.025,
     height: 3.0,
     lookAhead: 3.5,
     lookHeight: 1.1,
@@ -268,16 +271,16 @@ export const CAMERA = {
     yawFollow: 5.5,
     fov: 62,
     fovPerSpeed: 0.22,
-    fovMax: 74,
+    fovMax: 70,
   },
   bonnet: {
-    forward: 1.0,
+    forward: 1.38,
     height: 1.18,
     fov: 72,
   },
   /** The driver's eyes: just in front of the helmet, under the halo, the steering wheel and its display below. */
   cockpit: {
-    forward: 0.26,
+    forward: 0.36,
     height: 0.84,
     fov: 78,
     /** Draws from this close (m): the halo and the steering wheel are right in front of the eyes. */
