@@ -15,6 +15,8 @@ export const STR = {
     reset: 'Car reset · this lap’s time will not count',
   },
   driving: {
+    sensitivity: 'Steering sensitivity',
+    sensitivityHint: 'Lower for gentler key presses and smaller stick corrections. Higher for a quicker response. Low-speed turns keep their full steering range.',
     visibility: 'Visibility & feedback',
     pillar: 'Cockpit centre pillar',
     pillarHint: 'Hide the centre halo pillar in your own cockpit view for a clearer view of the road.',

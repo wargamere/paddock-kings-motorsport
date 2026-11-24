@@ -81,6 +81,8 @@ export interface Settings {
   assists: Assists;
   /** Keyboard keys for driving (see car/bindings.ts). */
   keys: KeyBindings;
+  /** Player steering response in percent; smaller values soften keys and stick movement. */
+  steeringSensitivity: number;
   /** Your car's setup: wing, gears, brake balance (see SETUP). */
   carSetup: CarSetup;
   /** The timing tower in races with AI cars: every car, just the cars near you (and the leaders), or hidden. */
@@ -114,6 +116,7 @@ const DEFAULTS: Settings = {
   sidebarSection: 0,
   assists: DEFAULT_ASSISTS,
   keys: DEFAULT_BINDINGS,
+  steeringSensitivity: 100,
   tower: 'full',
   carSetup: DEFAULT_SETUP,
   raceSetup: { mode: 'race', ghost: true, opponents: 3, difficulty: 50, grid: 'pick', startSlot: 4, weather: 'dry', time: 'track', tyreWear: false, tyres: 'medium', damage: false, safetyCar: false },
@@ -121,6 +124,9 @@ const DEFAULTS: Settings = {
 const KEY = 'settings';
 
 let current: Settings | null = null;
+
+export const cleanSteeringSensitivity = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(150, Math.max(50, value))) : 100;
 
 /** A saved setup, made safe: anything unknown is the standard choice. */
 function cleanSetup(saved: unknown): CarSetup {
@@ -159,7 +165,7 @@ export function withFine(s: CarSetup): CarSetup {
 export function settings(): Settings {
   if (!current) {
     const saved = loadJSON<Partial<Settings>>(KEY, {});
-    const read: Settings = { ...DEFAULTS, ...saved, assists: cleanAssists(saved.assists), keys: cleanBindings(saved.keys), carSetup: cleanSetup(saved.carSetup) };
+    const read: Settings = { ...DEFAULTS, ...saved, steeringSensitivity: cleanSteeringSensitivity(saved.steeringSensitivity), assists: cleanAssists(saved.assists), keys: cleanBindings(saved.keys), carSetup: cleanSetup(saved.carSetup) };
     for (const key of ['cockpitPillar', 'raceRadar', 'drivingFeedback', 'practiceTiming'] as const) read[key] = typeof saved[key] === 'boolean' ? saved[key] : DEFAULTS[key];
     // (Read before the saved data is ready, e.g. on CrazyGames before the SDK has started:
     // used, but not kept, so the real saved settings are read once they're there.)
@@ -171,5 +177,6 @@ export function settings(): Settings {
 
 export function updateSettings(patch: Partial<Settings>): void {
   current = { ...settings(), ...patch };
+  current.steeringSensitivity = cleanSteeringSensitivity(current.steeringSensitivity);
   saveJSON(KEY, current);
 }

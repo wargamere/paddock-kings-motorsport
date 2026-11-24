@@ -237,6 +237,17 @@ export const SIM = {
 } as const;
 
 export const INPUT = {
+  /** Player control response, separate from the physical actuator used by every car. */
+  steering: {
+    slowSpeed: 20,
+    fastSpeed: 85,
+    riseSlow: 0.22,
+    riseFast: 0.42,
+    release: 0.12,
+    fastAuthority: 0.55,
+    stickExponent: 1.7,
+    stickResponse: 0.035,
+  },
   /** Gamepad stick dead zone (the rest of the range is rescaled to 0..1). */
   stickDeadZone: 0.15,
   triggerDeadZone: 0.05,

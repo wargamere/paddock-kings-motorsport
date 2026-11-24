@@ -1,7 +1,7 @@
 import { bindKey, canBind, DEFAULT_BINDINGS, DRIVE_ACTIONS, KEY_SLOTS, keyLabel, PAUSE_KEY, type DriveAction } from '../car/bindings.ts';
 import { STR, fmt } from '../config/strings.ts';
 import { settings, updateSettings } from '../core/settings.ts';
-import { button, h } from './dom.ts';
+import { button, h, slider, type Slider } from './dom.ts';
 
 /**
  * The keyboard controls: every driving action with two keys. Click a key and
@@ -14,6 +14,7 @@ export class ControlsPanel {
   readonly root: HTMLElement;
   private readonly grid: HTMLElement;
   private readonly note: HTMLElement;
+  private readonly sensitivity: Slider;
   private capturing: { action: DriveAction; slot: number } | null = null;
   private onClose: () => void = () => {};
   private abort: AbortController | null = null;
@@ -24,11 +25,17 @@ export class ControlsPanel {
     this.note = h('p', { class: 'controls-note' });
     this.note.setAttribute('role', 'status');
     this.note.setAttribute('aria-live', 'polite');
+    this.sensitivity = slider(50, 150, 5, v => updateSettings({ steeringSensitivity: v }), () => {}, v => `${v}%`);
+    const steeringInput = this.sensitivity.el.querySelector('input')!;
+    steeringInput.setAttribute('aria-label', STR.driving.sensitivity);
+    steeringInput.tabIndex = 0;
     const panel = h(
       'div',
       { class: 'panel controls-panel' },
       h('h2', { text: C.title }),
       h('p', { class: 'assists-intro', text: C.intro }),
+      h('div', { class: 'field' }, h('span', { class: 'label', text: STR.driving.sensitivity }), this.sensitivity.el,
+        h('p', { class: 'setup-hint', text: STR.driving.sensitivityHint })),
       this.grid,
       this.note,
       h('p', { class: 'setup-hint', text: `${C.escNote} ${C.gamepad}` }),
@@ -77,6 +84,10 @@ export class ControlsPanel {
   }
 
   private onKey(e: KeyboardEvent): void {
+    if (!this.capturing && e.target instanceof HTMLInputElement && e.target.type === 'range' && e.code !== PAUSE_KEY) {
+      e.stopImmediatePropagation(); // preserve the slider's native keyboard control
+      return;
+    }
     const pass = !this.capturing && (e.code === 'Tab' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space');
     if (pass) return; // moving between buttons and pressing them
     e.preventDefault();
@@ -108,7 +119,7 @@ export class ControlsPanel {
   }
 
   private resetAll(): void {
-    updateSettings({ keys: Object.fromEntries(DRIVE_ACTIONS.map((a) => [a, [...DEFAULT_BINDINGS[a]]])) as typeof DEFAULT_BINDINGS });
+    updateSettings({ steeringSensitivity: 100, keys: Object.fromEntries(DRIVE_ACTIONS.map((a) => [a, [...DEFAULT_BINDINGS[a]]])) as typeof DEFAULT_BINDINGS });
     this.capturing = null;
     this.note.textContent = STR.controls.resetDone;
     this.render();
@@ -117,6 +128,7 @@ export class ControlsPanel {
   private render(): void {
     const C = STR.controls;
     const b = settings().keys;
+    this.sensitivity.set(settings().steeringSensitivity);
     const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.slot : undefined;
     const rows = DRIVE_ACTIONS.map((action) => {
       const keys = b[action];

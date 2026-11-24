@@ -807,7 +807,7 @@ export class RaceScreen implements Screen {
     if (!s.canDrive || s.retired) return NO_INPUT;
     if (s.phase === 'finished') return BRAKE;
     carAids(car, settings().assists);
-    let inp = applyAssists(this.game.track, st, this.input2.sample(this.p2Input), settings().assists, this.wet, car.tune, car.setup);
+    let inp = applyAssists(this.game.track, st, this.input2.sample(this.p2Input, st.speed), settings().assists, this.wet, car.tune, car.setup, this.input2.steeringIntent);
     inp.boost = this.p2Input.boost;
     if (Number.isFinite(ai.raceCap) && st.speed > ai.raceCap) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, st.speed > ai.raceCap + 3 ? 0.4 : 0) };
     if (st.inPits && st.speed > PIT_LANE.limit) inp = { ...inp, throttle: 0, brake: Math.max(inp.brake, st.speed > PIT_LANE.limit + 2 ? 0.5 : 0) };
@@ -1241,8 +1241,8 @@ export class RaceScreen implements Screen {
     // (Your car's aids as you've set them; the autopilot, an AI, drives with an AI's feel for the pedals.)
     if (this.autopilot) car.abs = car.tc = car.tcFull = car.stability = car.steerHelp = true;
     else carAids(car, assists);
-    let inp = session.phase === 'racing' ? this.input.sample(this.tickInput) : session.phase === 'finished' ? BRAKE : NO_INPUT;
-    if (session.phase === 'racing') inp = applyAssists(this.game.track, car.state, this.tickInput, assists, this.wet, car.tune, car.setup);
+    let inp = session.phase === 'racing' ? this.input.sample(this.tickInput, car.state.speed) : session.phase === 'finished' ? BRAKE : NO_INPUT;
+    if (session.phase === 'racing') inp = applyAssists(this.game.track, car.state, this.tickInput, assists, this.wet, car.tune, car.setup, this.input.steeringIntent);
     if (this.autopilot && session.phase === 'racing') inp = this.autopilot.drive(car.state);
     // Under the safety car: no faster than it lets you (the throttle is cut, and the brakes help a little).
     const control = this.control;
