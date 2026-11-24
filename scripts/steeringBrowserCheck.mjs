@@ -25,9 +25,12 @@ try {
     const g = window.__game; g.setTrack(builtInTrack('world-it-1922'));
     g.start({ mode: 'practice', opponents: 0, ghost: false, weather: 'dry', time: 'day' }); g.frame = () => {};
     const r = g.screens.race; r.session.phase = 'racing'; r.stage = 'run';
-    r.car.placeAt(100);
-    const s = r.car.state; Object.assign(s, { vx: Math.cos(s.heading) * 300 / 3.6, vz: Math.sin(s.heading) * 300 / 3.6, speed: 300 / 3.6 });
-    window.steeringStart = { x: s.x, z: s.z };
+    window.placeOnStraight = kmh => {
+      r.input.clear(); r.car.placeAt(100);
+      const s = r.car.state, speed = kmh / 3.6;
+      Object.assign(s, { vx: Math.cos(s.heading) * speed, vz: Math.sin(s.heading) * speed, speed });
+    };
+    window.placeOnStraight(300);
   });
   await page.keyboard.down('d');
   const turn = await page.evaluate(() => {
@@ -43,8 +46,28 @@ try {
     r.car.prev.copyFrom(r.car.state); r.rig.snap(r.car.state); r.frame(0);
     return { input: r.tickInput.steer, lateral: r.car.state.lateral, off: r.car.state.offTrack, speed: r.car.state.speed * 3.6 };
   });
-  assert.ok(turn.input > .08 && turn.input < .18, JSON.stringify(turn));
-  assert.equal(settled.input, 0); assert.equal(settled.off, false); assert.ok(Math.abs(settled.lateral) < 2);
+  assert.ok(turn.input > .02 && turn.input < .05, JSON.stringify(turn));
+  assert.equal(settled.input, 0); assert.equal(settled.off, false);
+  assert.ok(Math.abs(settled.lateral) > .1 && Math.abs(settled.lateral) < .35, JSON.stringify(settled));
+  await page.evaluate(() => window.placeOnStraight(220));
+  await page.keyboard.down('d');
+  const entryYaw = await page.evaluate(() => {
+    const r = window.__game.screens.race;
+    for (let i = 0; i < 36; i++) r.tick();
+    return r.car.state.yawRate;
+  });
+  await page.keyboard.up('d'); await page.keyboard.down('a');
+  const reversal = await page.evaluate(() => {
+    const r = window.__game.screens.race;
+    let ticks;
+    for (let i = 1; i <= 42; i++) {
+      r.tick();
+      if (ticks === undefined && r.car.state.yawRate < -.12) ticks = i;
+    }
+    return { ticks, yaw: r.car.state.yawRate, off: r.car.state.offTrack };
+  });
+  await page.keyboard.up('a');
+  assert.ok(entryYaw > .5 && reversal.ticks <= 25 && reversal.yaw < -.45 && !reversal.off, JSON.stringify({ entryYaw, reversal }));
   await page.evaluate(() => { const g = window.__game; g.screens.race.controlsPanel.open(g.ui); });
   const slider = page.getByRole('slider', { name: 'Steering sensitivity', exact: true });
   await slider.focus(); await page.keyboard.press('Home');
@@ -66,5 +89,5 @@ try {
   await page.reload(); await page.waitForFunction(() => window.__game);
   assert.equal(await page.evaluate(async () => (await import('/src/core/settings.ts')).settings().steeringSensitivity), 75);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ turn, settled, preference, errors }));
+  console.log(JSON.stringify({ turn, settled, entryYaw, reversal, preference, errors }));
 } finally { await browser?.close(); server.kill(); }
