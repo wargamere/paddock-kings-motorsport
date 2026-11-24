@@ -6,6 +6,7 @@ import { laneU, outerAt, pitLane, type PitLane } from './pitLane.ts';
 import { edgeOffsets, leftOf, sampleAt, surfaceY, type Centerline } from './spline.ts';
 import type { Track } from './track.ts';
 import { overTunnel } from './tunnels.ts';
+import { pointBounds } from './bounds.ts';
 
 /**
  * Everything about the ground a track sits on, shared by physics and rendering
@@ -156,10 +157,12 @@ function passHeight(c: Centerline, i: number, x: number, z: number): { h: number
 }
 
 function buildTerrain(c: Centerline, grid: SampleGrid): Terrain {
-  const { x0, z0 } = TERRAIN_RECT;
-  const step = TERRAIN_STEP;
-  const nx = Math.round((TERRAIN_RECT.x1 - x0) / step) + 1;
-  const nz = Math.round((TERRAIN_RECT.z1 - z0) / step) + 1;
+  const b=pointBounds(c.points,TERRAIN_MARGIN);
+  const x0=Math.min(TERRAIN_RECT.x0,b.x0),z0=Math.min(TERRAIN_RECT.z0,b.z0);
+  const x1=Math.max(TERRAIN_RECT.x1,b.x1),z1=Math.max(TERRAIN_RECT.z1,b.z1);
+  // Bound the heightfield cost as circuits grow to several kilometres.
+  const step=Math.max(TERRAIN_STEP,Math.ceil(Math.max(x1-x0,z1-z0)/180));
+  const nx=Math.ceil((x1-x0)/step)+1,nz=Math.ceil((z1-z0)/step)+1;
   const h = new Float32Array(nx * nz);
   const reach = c.wallOffset + BLEND + 2;
   const tmp: number[] = [];

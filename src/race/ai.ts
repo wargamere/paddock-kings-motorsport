@@ -45,7 +45,7 @@ export function aiPerformance(difficulty: number, hardware: Readonly<CarPerforma
 
 /** The same pace on a wet track: the same share of the grip and the brakes there are (see CONDITIONS). */
 export function wetPace(p: Pace): Pace {
-  return { ...p, grip: p.grip * CONDITIONS.rainGrip, brake: p.brake * CONDITIONS.rainBrake };
+  return { ...p, grip: p.grip * CONDITIONS.rainGrip, traction:(p.traction??1)*CONDITIONS.rainGrip, brake: p.brake * CONDITIONS.rainBrake };
 }
 
 /** The way into or out of the pit box: a path across the road (m left of the centre at s), the most it may go, and whether the path leaves the road (the pit lane). */
@@ -542,8 +542,8 @@ export class AiDriver {
     // (And held to the safety car's pace.)
     const cap = Math.min(this.planner.followSpeed(st, cars, this.lane, dt), pit?.cap ?? Infinity, this.raceCap);
     // After the finish it carries on a little slower (not parked on the line for others to hit);
-    // letting a quicker car by, it eases off (but not in the middle of a tight bend).
-    let pace = finished ? AI.afterFinishPace : this.planner.lettingBy && !this.planner.inBend ? TRAFFIC.letByEase : 1;
+    // Once laterally clear, ease off even on a twisty circuit with no long straights.
+    let pace = finished ? AI.afterFinishPace : this.planner.lettingBy && (!this.planner.inBend || this.planner.liftForPass) ? TRAFFIC.letByEase : 1;
     // Off the line at the start, the field strings out a little (each slot back a touch
     // slower for the first stretch), so the pack isn't three wide into the first bend.
     const run = s.raceDistance(st.s);
@@ -680,7 +680,10 @@ export class AiDriver {
     // chance, not many.)
     const braking = this.wasBraking ? inp.brake >= 0.3 : inp.brake >= 0.6 && st.speed > 25;
     const turning = this.wasTurning ? Math.abs(inp.steer) > 0.2 : Math.abs(inp.steer) > 0.35 && st.speed > 15;
-    const powering = this.wasPowering ? inp.throttle > 0.5 && Math.abs(inp.steer) > 0.15 : inp.throttle > 0.9 && Math.abs(inp.steer) > 0.3 && st.speed > 15;
+    // Full-size fast corners use small steering angles but substantial tyre load.
+    // Judge power-on mistakes by lateral acceleration rather than steering-wheel travel.
+    const lateralLoad = Math.abs(st.yawRate * st.speed);
+    const powering = this.wasPowering ? inp.throttle > 0.5 && lateralLoad > 1.5 : inp.throttle > 0.9 && lateralLoad > 3 && st.speed > 15;
     const edge = { lockup: braking && !this.wasBraking, wide: turning && !this.wasTurning, spin: powering && !this.wasPowering };
     this.wasBraking = braking;
     this.wasTurning = turning;

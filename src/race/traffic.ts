@@ -125,7 +125,7 @@ export class TrafficPlanner {
   private aside = false;
   /** Letting a quicker car by, and it's clear of us across the road (so we can lift without it running into us). */
   get liftForPass(): boolean {
-    return this.lettingBy && this.passerClear && !this.inBend;
+    return this.lettingBy && this.passerClear;
   }
   /** In, or right at, a tight bend (set by plan()). */
   inBend = false;
@@ -382,7 +382,7 @@ export class TrafficPlanner {
       if (ownLane && gap >= reachS && gap - 2 * CONTACT.halfLength > SLIPSTREAM.range) {
         // Out of reach and out of its slipstream: on the plan for our lane, no tow.
         k++;
-        vMe = Math.min(this.driver.laneSpeedFrom(slot!, sMe) * (1 + TRAFFIC.towGain * Math.max(0, this.pushing ? TRAFFIC.pushTow : 0)), vMe + TRAFFIC.pickUp * dt);
+        vMe = Math.min(this.driver.laneSpeedFrom(slot!, sMe) * (1 + TRAFFIC.towGain * Math.max(0, this.pushing ? TRAFFIC.pushTow : 0)), vMe + this.driver.accelerationAt(sMe,vMe) * dt);
         sMe += vMe * dt;
         sO += vO * dt;
         continue;
@@ -413,7 +413,7 @@ export class TrafficPlanner {
       // In its slipstream we'd go quicker than our plan (that's how a pass is set up).
       const tow = towStrength(sO - sMe - 2 * CONTACT.halfLength, Math.abs(lat - otherLat), vMe);
       const laneSpeed = slot ? this.driver.laneSpeedFrom(slot, sMe) : this.driver.laneSpeedAt(sMe, lat - this.driver.lateralAt(sMe));
-      vMe = Math.min(laneSpeed * (1 + TRAFFIC.towGain * Math.max(tow, this.pushing ? TRAFFIC.pushTow : 0)), vMe + TRAFFIC.pickUp * dt);
+      vMe = Math.min(laneSpeed * (1 + TRAFFIC.towGain * Math.max(tow, this.pushing ? TRAFFIC.pushTow : 0)), vMe + this.driver.accelerationAt(sMe,vMe) * dt);
       sMe += vMe * dt;
       sO += vO * dt;
       if (sO - sMe < -reachS) break;
@@ -739,12 +739,13 @@ export class TrafficPlanner {
   private nextCorner(s: number): { brake: number; apex: number; side: number } | null {
     const T = TRAFFIC;
     const step = 5;
+    const look=Math.max(T.defendLook,this.driver.speedAt(s)*T.defendLead+100);
     let top = this.driver.speedAt(s);
     let brake = 0;
     let prev = top;
     let found = false;
     let apex = -1;
-    for (let d = step; d <= T.defendLook; d += step) {
+    for (let d = step; d <= look; d += step) {
       const v = this.driver.speedAt(s + d);
       if (!found) {
         if (v >= top) {
@@ -758,7 +759,7 @@ export class TrafficPlanner {
       prev = v;
     }
     if (!found) return null;
-    if (apex < 0) apex = T.defendLook;
+    if (apex < 0) apex = look;
     // Its inside: the way the tightest part of it turns.
     let k = 0;
     for (let d = Math.max(0, apex - 25); d <= apex + 10; d += 5) {
@@ -874,6 +875,9 @@ export class TrafficPlanner {
       const a = along(from, s, L);
       const line = this.driver.lateralAt(s);
       let u = smooth(a / toBrake);
+      // Cover the braking entry, then take a normal apex instead of tracing
+      // the tight inside edge for the entire corner. keepOut still protects overlap.
+      if(a>toBrake)u*=1-smooth((a-toBrake)/Math.max(8,toApex-toBrake));
       if (a > toApex) u *= 1 - smooth((a - toApex) / T.defendPast);
       const inside = Math.max(0, (this.driver.lateralAt(s, side * 99) - side * T.coverGap - line) * side);
       return line + off0 * (1 - smooth(a / toBrake)) + side * inside * u;

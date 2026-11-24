@@ -49,7 +49,7 @@ export const CONDITIONS = {
   /** With no pit building, the box is this far past the start line (m). */
   boxDefaultS: 30,
   /** Time a stop costs beyond the service itself (s): braking into the box and getting going again (for the timing tower's "pit now" estimate). */
-  pitLossExtra: 3.5,
+  pitLossExtra: 3.8,
   /**
    * AI cars stop for tyres when theirs would go off before the box comes
    * round again, give or take pitEarly laps (one each, by grid slot, so not
@@ -274,7 +274,7 @@ export const SETUP = {
    * gears get going quicker but top out lower; long gears the other way.
    */
   gears: {
-    short: { ratio: 0.9, pull: 1.05, top: 0.97 },
+    short: { ratio: 0.86, pull: 1.05, top: 0.97 },
     medium: { ratio: 1, pull: 1, top: 1 },
     long: { ratio: 1.1, pull: 0.95, top: 1.03 },
   },
@@ -306,8 +306,8 @@ export type Compound = 'soft' | 'medium' | 'hard' | 'inter' | 'wet';
 export const TYRES = {
   lifeEasy: 6,
   lifeHard: 4,
-  workEasy: 450,
-  workHard: 950,
+  workEasy: 1150,
+  workHard: 1750,
   fadeLoss: 0.07,
   cliff: 0.25,
   deadGrip: 0.6,
@@ -392,7 +392,7 @@ export const TYRE_TEMP = {
  */
 export const FUEL = {
   carMass: 800,
-  perKm: 6,
+  perKm: 1.6,
   idle: 0.3,
   reserve: 3,
   max: 110,
@@ -551,7 +551,7 @@ export const DRIVER = {
   brakeGain: 1.5,
   /** More than this far off the line (m), it judges its speed by the path it's on (see pathLimit), × this. */
   offLine: 0.3,
-  offLineSpeed: 0.97,
+  offLineSpeed: 0.99,
   /** Lanes beside the line (offsets, m) that get a speed plan of their own. */
   planLanes: [-6, -4.5, -3, -1.5, 1.5, 3, 4.5, 6],
   /** More than this far (m) from where it means to be, the speed comes from the path from where it is… */
@@ -559,7 +559,7 @@ export const DRIVER = {
   /** …onto the one it wants, over this far (m)… */
   converge: 40,
   /** …using this share of its grip in the bends on it. */
-  offLineGrip: 0.95,
+  offLineGrip: 0.98,
   /** …looking this far along it (m), at points this far apart. */
   pathLook: 100,
   pathStep: 6,
@@ -594,12 +594,11 @@ export const TRAFFIC = {
   /**
    * It plays the car in front forward this far (s), in steps of this much, to
    * see whether it would run into it (and hold back for it); this far (s) to
-   * see whether a pass would come off; picking up speed at up to this (m/s²).
+   * see whether a pass would come off. Pickup follows the shared power/traction envelope.
    */
   horizon: 2.5,
   step: 0.25,
   passHorizon: 5,
-  pickUp: 5,
   /** In a car's slipstream (strength 0..1) it reckons on going up to this share quicker than its plan. */
   towGain: 0.08,
   /** Within this far along (m) and across (m) of another car, it eases off by this share. */
@@ -896,8 +895,8 @@ export const KNOCKOUT = {
  * A car within `gap` s of the car ahead at a zone's detection point
  * (`detect` m before it) may open its flap in that zone, from the second
  * lap, in the dry (road wetter than `wetFrom`: off) and never behind the
- * safety car. Open, it cuts the drag by `dragCut`, pushes `push` m/s² more
- * and lets the car run `top` faster; it opens by itself at full throttle and
+ * safety car. Open, it cuts drag by `dragCut`; `top` is the AI target allowance.
+ * It opens by itself at full throttle and
  * shuts on the brakes.
  */
 export const DRS = {
@@ -910,9 +909,9 @@ export const DRS = {
   startAfter: 15,
   endBefore: 15,
   detect: 80,
-  dragCut: 0.45,
-  top: 0.09,
-  push: 0.9,
+  dragCut: 0.14,
+  /** AI speed-target allowance; the physical gain comes from drag reduction. */
+  top: 0.06,
   wetFrom: 0.35,
 } as const;
 
@@ -966,15 +965,15 @@ export const DRS_REAL = {
 export const DRS_CUSTOM = { max: 4, shortest: 40 } as const;
 
 /**
- * The overtake boost (an ERS battery): held, it pushes `push` m/s² more and
- * lets the car run `top` faster, using `drain` of the battery a second (a
+ * The overtake boost (an ERS battery): held, it adds `power` W/kg of wheel
+ * power. `top` is the AI's speed-target allowance. It uses `drain` a second (a
  * full one lasts about 8 s); braking charges it, `harvest` a second at full
  * braking. Every car starts the race with a full battery. The AI uses it to
  * pass (closing on a car within `attack` m, on a straight) and to defend
  * (a car within `defend` m behind), keeping `reserve` back until the last lap.
  */
 export const ERS = {
-  push: 2.4,
+  power: 150,
   top: 0.04,
   drain: 0.125,
   harvest: 0.16,

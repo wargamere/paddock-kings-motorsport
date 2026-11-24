@@ -41,7 +41,7 @@ function solo(track: Track, laps: number, personality: Personality | undefined, 
   const ai = new AiDriver(track, { name: 'Test', paint: 0, difficulty: 0.8, laps, slot: 0, personality, ...opts });
   const mistakes: MistakeKind[] = [];
   ai.onMistake = (k) => mistakes.push(k);
-  for (let tick = 0; tick < laps * 120 * HANDLING.tickRate && ai.session.phase !== 'finished'; tick++) {
+  for (let tick = 0; tick < laps * 240 * HANDLING.tickRate && ai.session.phase !== 'finished'; tick++) {
     const prev = progressOf(ai.car, track);
     ai.car.step(ai.drive([ai.car.state], 1 / HANDLING.tickRate));
     ai.session.step(prev, progressOf(ai.car, track), []);

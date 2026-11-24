@@ -56,6 +56,7 @@ import {
   bumpNear,
   chicaneCorners,
   cleanExtras,
+  editablePaint,
   paintCell,
   paintCorner,
   paintDab,
@@ -72,6 +73,7 @@ import {
 import { nearestSample, planSection, spliceSection } from './splice.ts';
 import { crossingKind, crossingsOf, type TrackIssue } from './validation.ts';
 import { Viewport, ZOOM } from './viewport.ts';
+import { paperFor, type PaperSize } from '../track/bounds.ts';
 
 type Failed = { stroke: Vec2[]; issue: TrackIssue; at?: Vec2 };
 
@@ -89,6 +91,7 @@ interface Snapshot {
 const copyExtras = (e: TrackExtras | undefined): TrackExtras => ({
   ...(e?.placed ? { placed: e.placed.map((p) => ({ ...p })) } : {}),
   ...(e?.paint ? { paint: [...e.paint] } : {}),
+  ...(e?.paintFrame ? {paintFrame:{...e.paintFrame}} : {}),
   ...(e?.drs ? { drs: e.drs.map((m) => ({ ...m })) } : {}),
 });
 
@@ -154,6 +157,7 @@ export class EditorScreen implements Screen {
   private celebrate = false;
   private abort: AbortController | null = null;
   private readonly vp = new Viewport();
+  private paper:PaperSize=WORLD;
   private profile: Rect | null = null;
 
   // Settings (kept between visits).
@@ -521,8 +525,8 @@ export class EditorScreen implements Screen {
     const before = this.snapshot();
     const p = this.dots[this.selected];
     this.dots[this.selected] = { ...p,
-      x: clamp(p.x + dx, -WORLD.width / 2, WORLD.width / 2),
-      y: clamp(p.y + dy, -WORLD.height / 2, WORLD.height / 2),
+      x: clamp(p.x + dx, -this.paper.width / 2, this.paper.width / 2),
+      y: clamp(p.y + dy, -this.paper.height / 2, this.paper.height / 2),
       ...(dh ? { h: clampHeight((p.h ?? 0) + dh) } : {}),
     };
     this.commit(before);
@@ -794,7 +798,7 @@ export class EditorScreen implements Screen {
   private transform(how: Transform): void {
     if (this.dots.length < 2) return;
     const before = this.snapshot();
-    this.dots = transformDots(this.dots, how);
+    this.dots = transformDots(this.dots, how,this.paper);
     this.selected = -1;
     this.commit(before);
   }
@@ -877,6 +881,7 @@ export class EditorScreen implements Screen {
 
   private rebuild(): void {
     if (!this.dirty) return;
+    this.paper=paperFor(this.dots);this.vp.setWorld(this.paper);
     this.dirty = false;
     this.built = null;
     this.openLine = [];
@@ -929,7 +934,7 @@ export class EditorScreen implements Screen {
 
   private worldAt(sx: number, sy: number): Vec2 {
     const p = this.vp.toWorld(sx, sy);
-    return { x: clamp(p.x, -WORLD.width / 2, WORLD.width / 2), y: clamp(p.y, -WORLD.height / 2, WORLD.height / 2) };
+    return { x: clamp(p.x, -this.paper.width / 2, this.paper.width / 2), y: clamp(p.y, -this.paper.height / 2, this.paper.height / 2) };
   }
 
   private placeDot(w: Vec2, h?: number, b?: number): Dot {
@@ -1533,7 +1538,7 @@ export class EditorScreen implements Screen {
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
     const w = Math.max(...xs) - Math.min(...xs);
     const hgt = Math.max(...ys) - Math.min(...ys);
-    const s = Math.min(metres / b.length, (WORLD.width - 20) / Math.max(1, w), (WORLD.height - 20) / Math.max(1, hgt));
+    const s = Math.min(metres / b.length, (this.paper.width - 20) / Math.max(1, w), (this.paper.height - 20) / Math.max(1, hgt));
     this.dots = quantizeControl(b.dots.map((d) => ({ ...d, x: (d.x - cx) * s, y: (d.y - cy) * s })));
     this.dirty = true;
   }
@@ -1638,7 +1643,7 @@ export class EditorScreen implements Screen {
     if (kind === 'bump') d = Math.min(d, t.center.wallOffset - 0.5);
     let p = at(d);
     for (let k = 0; k < 120 && !placedClear(t, p); k++) p = at((d += 0.5));
-    if (!placedClear(t, p) || Math.abs(p.x) > WORLD.width / 2 + 40 || Math.abs(p.y) > WORLD.height / 2 + 40) {
+    if (!placedClear(t, p) || Math.abs(p.x) > this.paper.width / 2 + 40 || Math.abs(p.y) > this.paper.height / 2 + 40) {
       this.note = { text: STR.editorScenery.noRoom, kind: 'warn' };
       return;
     }
@@ -1650,10 +1655,10 @@ export class EditorScreen implements Screen {
   /** Paint tool: a stroke of run-off from `a` to `b` (dabs every half brush). */
   private paintStroke(a: Vec2, b: Vec2): void {
     if (this.tool?.kind !== 'paint') return;
-    const g = paintGrid(this.extras.paint).slice();
+    const {grid:g,frame}=editablePaint(this.extras,this.dots);
     const steps = Math.max(1, Math.ceil(dist(a, b) / Math.max(1, this.brush / 2)));
-    for (let k = 0; k <= steps; k++) paintDab(g, a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps, this.brush, this.tool.value);
-    this.extras = withPaint(this.extras, g);
+    for (let k = 0; k <= steps; k++) paintDab(g, a.x + ((b.x - a.x) * k) / steps, a.y + ((b.y - a.y) * k) / steps, this.brush, this.tool.value,frame);
+    this.extras = withPaint({...this.extras,paintFrame:frame}, g);
     this.dirty = true;
   }
 
@@ -1721,9 +1726,9 @@ export class EditorScreen implements Screen {
     const corners = which === 'all' ? t.kerbs.map((_, i) => i) : [which];
     if (!corners.length || (which !== 'all' && !t.kerbs[which])) return;
     const before = this.snapshot();
-    const g = paintGrid(this.extras.paint).slice();
-    for (const i of corners) paintCorner(g, t, i, value);
-    this.extras = withPaint(this.extras, g);
+    const {grid:g,frame}=editablePaint(this.extras,this.dots);
+    for (const i of corners) paintCorner(g, t, i, value,frame);
+    this.extras = withPaint({...this.extras,paintFrame:frame}, g);
     this.commit(before, { text: STR.editorScenery.runoffSet, kind: 'ok' });
   }
 
@@ -1736,8 +1741,8 @@ export class EditorScreen implements Screen {
     const side = k.sign > 0 ? 1 : -1;
     const l = { x: -c.tangents[k.apex].y, y: c.tangents[k.apex].x };
     const lat = (c.width / 2 + c.wallOffset) / 2;
-    const cell = paintCell(c.points[k.apex].x + l.x * lat * side, c.points[k.apex].y + l.y * lat * side);
-    return cell >= 0 ? paintGrid(this.extras.paint)[cell] : 0;
+    const cell = paintCell(c.points[k.apex].x + l.x * lat * side, c.points[k.apex].y + l.y * lat * side,this.extras.paintFrame);
+    return cell >= 0 ? paintGrid(this.extras.paint,this.extras.paintFrame)[cell] : 0;
   }
 
   /** Bump kerb on the inside of numbered corner `i`: on or off. */
@@ -2111,11 +2116,11 @@ export class EditorScreen implements Screen {
     const s = this.game.surface;
     const ctx = s.begin();
     const v = this.view;
-    drawPaper(ctx, v, s.w, s.h);
+    drawPaper(ctx, v, s.w, s.h,this.paper);
     if (this.trace) {
       // The image to trace, fitted to the drawing area (× its size), under everything else.
       const { img, opacity, size } = this.trace;
-      const fitS = Math.min(WORLD.width / img.width, WORLD.height / img.height) * size;
+      const fitS = Math.min(this.paper.width / img.width, this.paper.height / img.height) * size;
       const w = img.width * fitS;
       const hh = img.height * fitS;
       ctx.save();

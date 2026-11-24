@@ -1,7 +1,7 @@
 import { DEFAULT_OPTIONS, OPTION_CHOICES, THEME_IDS, TRACK, type TrackOptions } from '../config/track.ts';
 import { fromBase64Url, toBase64Url } from '../core/base64.ts';
 import type { Dot } from '../core/math.ts';
-import { cleanExtras, PLACED_KINDS, ROT_STEPS, type DrsMark, type Placed, type TrackExtras } from './extras.ts';
+import { cleanExtras, cleanPaintFrame, PLACED_KINDS, ROT_STEPS, type DrsMark, type Placed, type TrackExtras } from './extras.ts';
 
 /**
  * TRACK CODES — a short text form of a track that players copy and paste.
@@ -150,7 +150,7 @@ export function encodeTrack(name: string, dots: readonly Dot[], options: Partial
   for (const [tag, body] of blocks) {
     pushVarint(out, tag);
     pushVarint(out, body.length);
-    out.push(...body);
+    for(const value of body)out.push(value);
   }
   out.push(checksum(out, out.length));
   return CODE_PREFIX + toBase64Url(Uint8Array.from(out));
@@ -185,6 +185,10 @@ function extraBlocks(e: TrackExtras | undefined): [number, number[]][] {
     pushVarint(body, e.drs.length);
     for (const m of e.drs) body.push(...int16Bytes(m.x / q), ...int16Bytes(m.y / q), ...int16Bytes(m.x2 / q), ...int16Bytes(m.y2 / q));
     out.push([3, body]);
+  }
+  if(e?.paintFrame){
+    const f=e.paintFrame,body=[...int16Bytes(f.x0/q),...int16Bytes(f.y0/q)];
+    pushVarint(body,f.cell);pushVarint(body,f.cols);pushVarint(body,f.rows);out.push([4,body]);
   }
   return out;
 }
@@ -247,6 +251,10 @@ function readExtras(blocks: { tag: number; bytes: Uint8Array }[]): TrackExtras |
         drs.push({ x: x * q, y: y * q, x2: x2 * q, y2: y2 * q });
       }
       e.drs = drs;
+    } else if(tag===4) {
+      const x=int16(),y=int16(),cell=varint(),cols=varint(),rows=varint();
+      if(x===null||y===null)return null;
+      const frame=cleanPaintFrame({x0:x*q,y0:y*q,cell,cols,rows});if(!frame)return null;e.paintFrame=frame;
     }
   }
   return e.placed || e.paint || e.drs ? e : {};
