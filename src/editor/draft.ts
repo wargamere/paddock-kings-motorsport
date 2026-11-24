@@ -42,7 +42,7 @@ const KEY = 'editor.draft.v1';
 export function readDraft(): EditorDraft | null {
   const d = loadJSON<Partial<EditorDraft> | null>(KEY, null);
   if (!d || !Array.isArray(d.dots) || d.dots.length < 1 || d.dots.length > 2000 || typeof d.closed !== 'boolean' || typeof d.name !== 'string' || !Number.isFinite(d.savedAt)) return null;
-  if (d.dots.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > 8192 || Math.abs(p.y) > 8192 || (p.h !== undefined && (!Number.isFinite(p.h) || p.h < 0 || p.h > TRACK.maxHeight)) || (p.b !== undefined && (!Number.isFinite(p.b) || p.b < 0 || p.b > 35)))) return null;
+  if (d.dots.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > 8192 || Math.abs(p.y) > 8192 || (p.h !== undefined && (!Number.isFinite(p.h) || p.h < 0 || p.h > TRACK.maxHeight)) || (p.b !== undefined && (!Number.isFinite(p.b) || p.b < 0 || p.b > 35)) || (p.bank !== undefined && (!Number.isFinite(p.bank) || Math.abs(p.bank) > 35)))) return null;
   const raw = d.options;
   if (!raw || typeof raw !== 'object') return null;
   const options = { ...DEFAULT_OPTIONS };

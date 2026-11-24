@@ -2,7 +2,7 @@ import type { CarState } from '../car/physics.ts';
 import { towStrength } from '../car/slipstream.ts';
 import { CONTACT, SLIPSTREAM, TRAFFIC } from '../config/race.ts';
 import { clamp } from '../core/math.ts';
-import { leftOf } from '../track/spline.ts';
+import { leftOf, surfaceY } from '../track/spline.ts';
 import type { Track } from '../track/track.ts';
 import type { Corridor, LaneSlot, RacingDriver } from './driver.ts';
 import { Racecraft, type RacecraftAction } from './racecraft.ts';
@@ -198,11 +198,22 @@ export class TrafficPlanner {
     this.racecraft = new Racecraft(driver, this.L, pace);
   }
 
+  /** Compare height above the local road, not absolute altitude. Cars up a
+   * hill must remain visible far enough ahead to brake for a stopped queue. */
+  private sameLevel(a: CarState, b: CarState): boolean {
+    const c = this.track.center, n = c.points.length;
+    const relative = (car: CarState) => {
+      const f = ((car.s / c.spacing) % n + n) % n, i = Math.floor(f), u = f - i;
+      return car.y - surfaceY(c, i, car.lateral) * (1-u) - surfaceY(c, (i+1)%n, car.lateral) * u;
+    };
+    return Math.abs(relative(a)-relative(b)) <= CONTACT.heightGap;
+  }
+
   /** Collects the cars near `me` (same level, from a little behind to well ahead). */
   private gather(me: CarState, cars: readonly CarState[]): void {
     this.near.length = 0;
     for (const o of cars) {
-      if (o === me || Math.abs(o.y - me.y) > CONTACT.heightGap) continue;
+      if (o === me || !this.sameLevel(me, o)) continue;
       const ds = along(me.s, o.s, this.L);
       if (ds < -TRAFFIC.behind || ds > TRAFFIC.ahead) continue;
       this.near.push(this.toNear(o, ds));
@@ -226,13 +237,18 @@ export class TrafficPlanner {
   /** Where car `o` will be across the road `t` seconds ahead, at `s` along the track. */
   private theirLat(o: Near, s: number, t: number): number {
     if (o.ai) {
-      const route = planners.get(o.car)?.choice.route;
+      const planner = planners.get(o.car);
+      const route = planner?.choice.route;
       if (route) {
         const wanted = route(s), reach = laneReach(t);
         return clamp(wanted, o.lat - reach, o.lat + reach);
       }
       // It keeps its offset from the line, on the road; one already off the road stays where it is.
-      const lat = this.driver.lateralAt(s, o.off);
+      // A cooperative car has explicitly committed to its let-by lane. Predict
+      // its bounded movement there, rather than treating it as stationary on
+      // the line throughout the passing forecast (which can deadlock a queue).
+      const move = planner?.lettingBy ? clamp(planner.choice.offset - o.off, -laneReach(t), laneReach(t)) : 0;
+      const lat = this.driver.lateralAt(s, o.off + move);
       return o.lat > lat + 0.5 && o.lat > this.driver.lateralAt(s, 99) ? o.lat : o.lat < lat - 0.5 && o.lat < this.driver.lateralAt(s, -99) ? o.lat : lat;
     }
     // Predict the player's observed road-relative movement. Assuming that a player will
@@ -277,7 +293,8 @@ export class TrafficPlanner {
    * and in a bend more (tails swing out), except passing in a let-by.
    */
   private sideRoom(me: CarState, o: { ai: boolean; car: CarState }, margin: number): number {
-    return 2 * CONTACT.halfWidth + TRAFFIC.marginSide * margin + (o.ai && this.cooperating(me, o.car) ? 0 : this.bendRoom);
+    const bend = o.ai && this.cooperating(me, o.car) ? 0 : this.bendRoom;
+    return 2 * CONTACT.halfWidth + TRAFFIC.marginSide * margin + bend;
   }
 
   /**
@@ -616,10 +633,13 @@ export class TrafficPlanner {
     for (let d = 0; d <= 20; d += 5) bend = Math.max(bend, Math.abs(this.driver.curvatureAt(me.s + d)));
     const closingMargin = bend > TRAFFIC.closingBend ? TRAFFIC.closingMargin : 0;
     for (const o of cars) {
-      if (o === me || Math.abs(o.y - me.y) > CONTACT.heightGap) continue;
+      if (o === me || !this.sameLevel(me, o)) continue;
       const ds = along(me.s, o.s, this.L);
       if (ds <= 0 || ds > TRAFFIC.ahead) continue;
-      const gap = ds - 2 * CONTACT.halfLength;
+      // Centre-line arc distance overstates the real bumper gap on the inside
+      // of a hairpin, particularly with a full-length chassis.
+      const closeInLine = ds < reachS * 1.6 && Math.abs(o.lateral - me.lateral) < 2 * CONTACT.halfWidth;
+      const gap = (closeInLine ? Math.min(ds, Math.hypot(o.x - me.x, o.z - me.z)) : ds) - 2 * CONTACT.halfLength;
       const human = !aiCars.has(o);
       const other = this.toNear(o, ds);
       let reachL = this.sideRoom(me, { ai: !human, car: o }, this.inBend ? 1 : 0.5) + Math.min(TRAFFIC.closingMarginMax, closingMargin * Math.max(0, v - Math.max(0, o.speed) - 2));
@@ -692,7 +712,7 @@ export class TrafficPlanner {
     const left = leftOf(this.track.center.tangents[Math.max(0, me.trackIndex)]);
     const myAcross = me.vx * left.x + me.vz * left.y;
     for (const o of cars) {
-      if (o === me || Math.abs(o.y - me.y) > CONTACT.heightGap) continue;
+      if (o === me || !this.sameLevel(me, o)) continue;
       const ds = along(me.s, o.s, this.L);
       const side = o.lateral - me.lateral;
       // A car behind gets its room once its nose is well up alongside us (past our rear
@@ -998,7 +1018,7 @@ export class TrafficPlanner {
   /** Is a car coming up behind within a few seconds (so it's not safe to rejoin the road)? */
   carComing(me: CarState, cars: readonly CarState[]): boolean {
     for (const o of cars) {
-      if (o === me || Math.abs(o.y - me.y) > CONTACT.heightGap) continue;
+      if (o === me || !this.sameLevel(me, o)) continue;
       const ds = along(me.s, o.s, this.L);
       if (ds < 0 && ds > -TRAFFIC.rejoinClear && o.speed > 3) return true;
     }

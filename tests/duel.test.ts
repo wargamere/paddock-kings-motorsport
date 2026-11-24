@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { collideCars } from '../src/car/contact.ts';
 import { CarPhysics } from '../src/car/physics.ts';
 import { HANDLING } from '../src/config/handling.ts';
+import { CONTACT } from '../src/config/race.ts';
 import { getSampleTrack, SAMPLE_COUNT } from '../src/editor/pipeline.ts';
 import { AiDriver, aiPace } from '../src/race/ai.ts';
 import { RacingDriver } from '../src/race/driver.ts';
@@ -94,7 +95,7 @@ function intoHairpin(follow: number) {
   const line = new RacingDriver(t, aiPace(1));
   const you = new CarPhysics(t);
   const cars = isFinite(follow) ? [bot.car.state, you.state] : [bot.car.state];
-  let ys = s0 - 4.2 - (isFinite(follow) ? follow : 500);
+  let ys = s0 - 2 * CONTACT.halfLength - (isFinite(follow) ? follow : 500);
   let contacts = 0;
   let time = 0;
   let latAtBrake = NaN;
@@ -106,7 +107,7 @@ function intoHairpin(follow: number) {
     time += DT;
     if (isFinite(follow)) {
       const v = Math.min(st.speed + 1.5, line.speedAt(ys) * 1.05);
-      ys = Math.min(ys + v * DT, st.s - 4.2 - follow);
+      ys = Math.min(ys + v * DT, st.s - 2 * CONTACT.halfLength - follow);
       you.placeAt(ys, line.lateralAt(ys));
       const tg = c.tangents[Math.max(0, you.state.trackIndex)];
       Object.assign(you.state, { vx: tg.x * v, vz: tg.y * v, speed: v });

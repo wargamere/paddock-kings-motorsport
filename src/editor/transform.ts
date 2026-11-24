@@ -29,7 +29,7 @@ export function transformDots(dots: readonly Dot[], how: Transform, paper:PaperS
     const x = d.x - cx;
     const y = d.y - cy;
     const p = how === 'rotate' ? { x: -y, y: x } : how === 'mirror' ? { x: -x, y } : { x: x * f, y: y * f };
-    return { ...d, x: p.x + cx, y: p.y + cy };
+    return { ...d, x: p.x + cx, y: p.y + cy, ...(how === 'mirror' && d.bank !== undefined ? { bank: d.bank ? -d.bank : 0 } : {}) };
   });
   // Keep it on the paper: shrink if it's too big, then slide it back inside.
   const margin = 12;

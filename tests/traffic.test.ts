@@ -73,13 +73,15 @@ test('quicker AI cars starting behind slower ones work their way to the front', 
   let tauSum = 0;
   for (let si = 0; si < SAMPLE_COUNT; si++) {
     const t = getSampleTrack(si);
-    const r = race(t, diffs.map(ai), 4, 600);
+    // Full-length cars and an 8 m stagger need more short-track laps to
+    // complete several clean passes through a reversed four-car grid.
+    const r = race(t, diffs.map(ai), 6, 600);
     const pos = (k: number) => r.order.indexOf(k);
     assert.ok(pos(3) < pos(0), `${t.def.name}: the quickest finishes ahead of the slowest (${r.order})`);
     tauSum += orderAgreement(r.order, [3, 2, 1, 0]);
     assert.ok(r.kinds.hard <= 1, `${t.def.name}: ${r.kinds.hard} hard knocks`);
   }
-  // In four laps the order mostly sorts itself out (on a short, twisty track not always all of it).
+  // In six laps the order mostly sorts itself out (on a short, twisty track not always all of it).
   assert.ok(tauSum / SAMPLE_COUNT >= 0.4, `finishing order agrees with pace on average by ${(tauSum / SAMPLE_COUNT).toFixed(2)}`);
 });
 

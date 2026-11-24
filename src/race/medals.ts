@@ -16,7 +16,7 @@ export const MEDALS: readonly { id: MedalId; factor: number }[] = [
 ];
 
 /** Bump when the physics or the bot change, so stored author times are recomputed. */
-export const AUTHOR_VERSION = 10;
+export const AUTHOR_VERSION = 11;
 
 export type MedalTimes = Record<MedalId, number>;
 

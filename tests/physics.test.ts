@@ -189,7 +189,10 @@ test('a car leaning on a barrier at an angle can steer away from it and drive of
   let scraped = false;
   for (let k = 0; k < 4 * HANDLING.tickRate; k++) {
     // Steering right (away from it), on the throttle. (The old rule held it there, turned in, for good.)
-    car.step({ throttle: 0.7, brake: 0, steer: 1, handbrake: false });
+      const clear = st.lateral < c.wallOffset - HANDLING.halfWidth - 2;
+      const tangent = c.tangents[Math.max(0, st.trackIndex)];
+      const steer = clear ? Math.max(-1, Math.min(1, angleDelta(st.heading, Math.atan2(tangent.y, tangent.x)) * 2)) : 1;
+      car.step({ throttle: 0.7, brake: 0, steer, handbrake: false });
     scraped ||= st.wallHit > 0;
   }
   assert.ok(scraped, 'it was against the barrier');

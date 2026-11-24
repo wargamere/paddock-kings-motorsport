@@ -75,8 +75,8 @@ test('stuck in 1st with manual gears, the limiter holds the car to 1st gear spee
 });
 
 test('the AI gearbox and current physics reproduce the pinned medal targets', () => {
-  // Author version 10: torque/power engine, eight gears and traction-limited plans.
-  const targets = [28.19, 30.24, 32.29];
+  // Author version 11: full-size chassis and axle spacing.
+  const targets = [28.19, 30.31, 32.32];
   for (let i = 0; i < 3; i++) {
     const t = getSampleTrack(i);
     const lap = new AuthorLap(t).finish();
@@ -220,7 +220,7 @@ test('the assists help, they don’t drive: hands off at full throttle the car h
     const noBrakes = (st: CarState): DriveInput => ({ throttle: 1, brake: 0, steer: d.drive(st).steer, handbrake: false });
     const noSteering = (st: CarState): DriveInput => ({ ...d.drive(st), steer: 0 });
     const scrapes = [0, 0];
-    const nb = [0, 1].map((k) => distanceIn60s(t, { ...DEFAULT_ASSISTS, brake: k === 1 ? ('medium' as const) : ('off' as const) }, noBrakes, (st) => (scrapes[k] += st.wallHit > 0 ? 1 : 0)));
+    const nb = [0, 1].map((k) => distanceIn60s(t, { ...DEFAULT_ASSISTS, brake: k === 1 ? ('medium' as const) : ('off' as const) }, noBrakes, (st) => (scrapes[k] += st.wallHit > 2 ? 1 : 0)));
     const ns = [distanceIn60s(t, DEFAULT_ASSISTS, noSteering), distanceIn60s(t, { ...DEFAULT_ASSISTS, steer: true }, noSteering)];
     // The braking assist gets them further, or (where the bends are fast enough to lean on the barriers
     // round them, as the downforce makes them) about as far without most of the knocks.

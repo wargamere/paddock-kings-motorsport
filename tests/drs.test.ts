@@ -112,16 +112,17 @@ function run(ticks: number, speed: number, set: (car: CarPhysics) => void, input
 }
 
 test('DRS open and the boost: quicker down a straight; the boost drains the battery, braking charges it', () => {
-  const plain = run(120, 45, () => {});
-  const drs = run(120, 45, (c) => (c.drs = true));
-  const boost = run(120, 45, () => {}, { boost: true });
+  // Above the traction-limited launch phase, additional wheel power is usable.
+  const plain = run(120, 65, () => {});
+  const drs = run(120, 65, (c) => (c.drs = true));
+  const boost = run(120, 65, () => {}, { boost: true });
   for (const c of [plain, drs, boost]) assert.equal(c.state.offTrack, false, 'still on the straight');
   assert.ok(drs.state.speed > plain.state.speed + 0.2, `DRS ${drs.state.speed.toFixed(2)} vs ${plain.state.speed.toFixed(2)} m/s`);
   assert.ok(boost.state.speed > plain.state.speed + 0.3, `boost ${boost.state.speed.toFixed(2)} vs ${plain.state.speed.toFixed(2)} m/s`);
   assert.ok(Math.abs(boost.ers - (1 - ERS.drain)) < 0.01, `battery ${boost.ers.toFixed(3)} after 1 s`);
   assert.equal(plain.ers, 1, 'not used, still full');
   // An empty battery: no boost.
-  const empty = run(120, 45, (c) => (c.ers = 0), { boost: true });
+  const empty = run(120, 65, (c) => (c.ers = 0), { boost: true });
   assert.ok(Math.abs(empty.state.speed - plain.state.speed) < 1e-9);
   assert.equal(empty.boosting, false);
   // Braking hard charges it.
