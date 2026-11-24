@@ -22,6 +22,7 @@
     "test:physics:browser": "node scripts/physicsBrowserCheck.mjs",
     "test:timing:browser": "node scripts/lapTimingBrowserCheck.mjs",
     "test:scale:browser": "node scripts/fullScaleBrowserCheck.mjs",
+    "test:steering:browser": "node scripts/steeringBrowserCheck.mjs",
     "baseline:ai": "node training/baseline.ts",
     "train:ai": "node training/train.ts",
     "eval:ai": "node training/evaluate.ts",

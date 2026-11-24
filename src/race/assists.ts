@@ -66,7 +66,7 @@ export function carAids(car: CarPhysics, a: Assists): void {
  * Off below a walking pace, when reversing, and in the pit lane (the line is
  * on the other side of the pit wall; the limiter does the braking there).
  */
-export function applyAssists(track: Track, st: CarState, inp: DriveInput, a: Assists, wet = false, tune: Readonly<CarPerformance> = STANDARD_CAR, setup: CarSetup = DEFAULT_SETUP): DriveInput {
+export function applyAssists(track: Track, st: CarState, inp: DriveInput, a: Assists, wet = false, tune: Readonly<CarPerformance> = STANDARD_CAR, setup: CarSetup = DEFAULT_SETUP, steeringIntent = Math.abs(inp.steer)): DriveInput {
   if ((a.brake === 'off' && !a.steer) || st.speed < ASSISTS.minSpeed) return inp;
   const lane = pitLane(track);
   if (lane && onLane(lane, st.s, st.lateral)) return inp;
@@ -89,7 +89,7 @@ export function applyAssists(track: Track, st: CarState, inp: DriveInput, a: Ass
     const offLine = st.lateral - d.lateralAt(st.s); // + = left of the line
     const turned = angleDelta(lineHeading, st.heading); // + = pointing right of it
     const want = ASSISTS.steerPerMetre * offLine - ASSISTS.steerPerRadian * turned;
-    const own = Math.min(1, Math.abs(inp.steer));
+    const own = Math.min(1, Math.max(Math.abs(inp.steer), steeringIntent));
     inp.steer += Math.max(-ASSISTS.steerShare, Math.min(ASSISTS.steerShare, want)) * (1 - own);
   }
   return inp;

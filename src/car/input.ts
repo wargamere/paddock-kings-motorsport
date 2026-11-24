@@ -1,8 +1,8 @@
 import { HANDLING, INPUT } from '../config/handling.ts';
-import { clamp } from '../core/math.ts';
 import { settings } from '../core/settings.ts';
 import { actionMap, splitMaps, type DriveAction, type KeyBindings } from './bindings.ts';
 import type { DriveInput } from './physics.ts';
+import { PlayerSteering } from './playerSteering.ts';
 
 export type InputAction = 'pause' | 'reset' | 'camera' | 'mute' | 'tower';
 export type InputDevice = 'keyboard' | 'gamepad' | 'touch';
@@ -49,12 +49,16 @@ export class InputManager {
   onAction: (a: InputAction) => void = () => {};
   /** The device used most recently (the HUD shows matching hints). */
   lastDevice: InputDevice = 'keyboard';
+  /** Raw driver intent, so line assistance yields even while steering is easing in. */
+  steeringIntent = 0;
   readonly touch: TouchState = { throttle: false, brake: false, steer: 0, shift: 0, boost: false };
   /** Gear changes asked for (keyboard and gamepad) and not yet made. */
   private shifts = 0;
   /** The keyboard's and the touch pads' pedals, eased in (see INPUT.keyThrottleRise). */
   private keyThrottle = 0;
   private keyBrake = 0;
+  private readonly steering = new PlayerSteering();
+  private padDpad = 0;
   /** The key bindings in use, and what each key does (rebuilt when they change, or the player changes). */
   private bound: KeyBindings | null = null;
   private boundFor: 'solo' | 'p1' | 'p2' = 'solo';
@@ -115,6 +119,12 @@ export class InputManager {
     this.touch.shift = 0;
     this.touch.boost = false;
     this.shifts = 0;
+    this.keyThrottle = this.keyBrake = 0;
+    this.steering.reset();
+    this.steeringIntent = 0;
+    this.padDpad = 0;
+    this.pad.throttle = this.pad.brake = this.pad.steer = 0;
+    this.pad.boost = false;
   }
 
   private onKey(e: KeyboardEvent, down: boolean): void {
@@ -149,6 +159,7 @@ export class InputManager {
     const p = this.pad;
     if (!gp) {
       p.throttle = p.brake = p.steer = 0;
+      this.padDpad = 0;
       p.boost = false;
       this.padPressed = [];
       return;
@@ -158,11 +169,12 @@ export class InputManager {
     const dz = (v: number, zone: number) => (Math.abs(v) < zone ? 0 : (v - Math.sign(v) * zone) / (1 - zone));
     const stick = dz(gp.axes[0] ?? 0, INPUT.stickDeadZone);
     const dpad = (pressed(PAD.right) ? 1 : 0) - (pressed(PAD.left) ? 1 : 0);
-    p.steer = clamp(stick + dpad, -1, 1);
+    p.steer = stick;
+    this.padDpad = dpad;
     p.throttle = Math.max(dz(btn(PAD.rt), INPUT.triggerDeadZone), pressed(PAD.a) ? 1 : 0);
     p.brake = Math.max(dz(btn(PAD.lt), INPUT.triggerDeadZone), pressed(PAD.x) ? 1 : 0);
     p.boost = pressed(PAD.b);
-    if (p.steer || p.throttle || p.brake) this.lastDevice = 'gamepad';
+    if (p.steer || dpad || p.throttle || p.brake) this.lastDevice = 'gamepad';
     for (const [i, dir] of [[PAD.rb, 1], [PAD.lb, -1]] as const) {
       if (pressed(i) && !this.padPressed[i]) {
         this.lastDevice = 'gamepad';
@@ -179,7 +191,7 @@ export class InputManager {
   }
 
   /** The combined input for one physics tick. */
-  sample(out: DriveInput): DriveInput {
+  sample(out: DriveInput, speed = 0): DriveInput {
     this.bindings();
     const held = (a: DriveAction) => this.actionKeys(a).some((c) => this.keys.has(c));
     const t = this.touch;
@@ -192,7 +204,9 @@ export class InputManager {
     this.keyBrake = ease(this.keyBrake, held('brake') || t.brake, INPUT.keyBrakeRise);
     out.throttle = Math.max(this.keyThrottle, this.pad.throttle);
     out.brake = Math.max(this.keyBrake, this.pad.brake);
-    out.steer = clamp(keySteer + this.pad.steer + t.steer, -1, 1);
+    const digital = keySteer + this.padDpad + t.steer;
+    this.steeringIntent = Math.min(1, Math.abs(digital) + Math.abs(this.pad.steer));
+    out.steer = this.steering.sample(digital, this.pad.steer, speed, dt, settings().steeringSensitivity);
     out.handbrake = false; // the handbrake is switched off for now
     out.boost = held('boost') || !!this.pad.boost || t.boost;
     // One gear change per tick, so quick presses go through one after the other.

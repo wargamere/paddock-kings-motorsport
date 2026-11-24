@@ -30,6 +30,7 @@ jobs:
       - run: npm run test:physics:browser
       - run: npm run test:timing:browser
       - run: npm run test:scale:browser
+      - run: npm run test:steering:browser
       - run: npm run test:ai:browser -- training/runs/ci-smoke/policy.json
       - name: Smoke-test a full grid in wet Las Vegas at night
         run: npm run bench:wet-race -- ci
