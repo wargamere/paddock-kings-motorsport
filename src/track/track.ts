@@ -41,7 +41,8 @@ export function buildTrack(def: TrackDef): Track {
   const options = trackOptions(def);
   const center = buildCenterline(def.control, options.banking, undefined, options.width, options.barrierGap);
   const tightCorners = findCorners(center, TRACK.cornerRadius, TRACK.cornerMinTurn);
-  const kerbs = findCorners(center, TRACK.kerbRadius, TRACK.kerbMinTurn);
+  // Full-length circuits also need kerbs through fast bends, not only hairpins.
+  const kerbs = findCorners(center, TRACK.kerbRadius * Math.max(1, center.length / 1600), TRACK.kerbMinTurn);
   return { def, options, center, tightCorners, kerbs };
 }
 

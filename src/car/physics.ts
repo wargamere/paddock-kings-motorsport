@@ -1,6 +1,8 @@
 import { HANDLING, SIM } from '../config/handling.ts';
 import { DAMAGE, DEFAULT_SETUP, DRS, ERS, FUEL, SETUP, TYRE_TEMP, TYRES, type CarSetup, type Compound } from '../config/race.ts';
 import { TyreThermal } from './tyreThermal.ts';
+import { engineAcceleration } from './powertrain.ts';
+import { pointBounds, type Bounds } from '../track/bounds.ts';
 import { clamp } from '../core/math.ts';
 import { locatorFor, type TrackLocator } from '../track/locator.ts';
 import { pitLayout } from '../track/pits.ts';
@@ -269,6 +271,7 @@ export class CarPhysics {
   /** Slower carcass temperature: a hot surface can cool without instantly cooling the whole tyre. */
   readonly tyreCore = this.thermal.core;
   private readonly track: Track;
+  private readonly worldBounds: Bounds;
   private readonly locator: TrackLocator;
   private readonly obstacles: ObstacleGrid;
   private readonly surf: TrackSurface;
@@ -284,6 +287,8 @@ export class CarPhysics {
 
   constructor(track: Track) {
     this.track = track;
+    const bounds=pointBounds(track.center.points,150);
+    this.worldBounds={x0:Math.min(-HANDLING.worldLimit,bounds.x0),x1:Math.max(HANDLING.worldLimit,bounds.x1),z0:Math.min(-HANDLING.worldLimit,bounds.z0),z1:Math.max(HANDLING.worldLimit,bounds.z1)};
     const kind = HANDLING.roads[track.options.road];
     this.roadSurface = { ...HANDLING.road, accelFactor: kind.accel, rough: kind.rough };
     this.locator = locatorFor(track);
@@ -503,7 +508,7 @@ export class CarPhysics {
     let brakeAsk = 0;
     stepGearbox(st, this.gearbox, inp.shift ?? 0, vf, dt, gears.ratio);
     // (Shorter gears pull harder but top out lower, longer ones the other way.)
-    const pull = enginePull(st, vf, gears.ratio) * gears.pull;
+    const pull = enginePull(st, vf, gears.ratio);
     // In another car's slipstream the air resistance drops and the tow pulls the car along,
     // past its usual top speed: enough to draw alongside on a straight.
     const tow = this.draft;
@@ -513,11 +518,9 @@ export class CarPhysics {
     this.boosting = boost;
     // The fuel aboard (FUEL): the same engine, brakes and air pushing a heavier car.
     const mass = this.massFactor;
-    let resist = H.rollingDrag + surfDrag + (H.aeroDrag * wing.drag * (1 + DAMAGE.bodyDrag * this.bodyDamage) * (1 - H.slipstreamDragCut * tow) * (1 - flap) * vf * vf) / mass;
+    let resist = H.rollingDrag + surfDrag + (H.aeroDrag * wing.drag / (this.tune.top * this.tune.top) * (1 + DAMAGE.bodyDrag * this.bodyDamage) * (1 - H.slipstreamDragCut * tow) * (1 - flap) * vf * vf) / mass;
     if (throttle > 0) {
-      const extra = H.slipstreamTopSpeed * tow + (this.drs ? DRS.top : 0) + (boost ? ERS.top : 0);
-      const fade = Math.max(0, 1 - vf / (H.maxSpeed * this.tune.top * gears.top * speedF * (1 + extra)));
-      if (vf >= -0.5) engine = ((H.engineAccel * this.tune.pull * accelF * pull + H.slipstreamPush * tow + (this.drs ? DRS.push : 0) + (boost ? ERS.push : 0)) * throttle * fade) / mass;
+      if (vf >= -0.5) engine = (engineAcceleration(vf, this.tune.pull * gears.pull, this.tune.top * gears.top * speedF, boost ? ERS.power : 0) * accelF * pull * throttle) / mass;
       else resist += brakeDecel * throttle;
     }
     // The battery: the boost uses it, braking charges it.
@@ -787,13 +790,13 @@ export class CarPhysics {
         st.yawRate *= 0.5;
       }
     });
-    const lim = H.worldLimit;
-    if (Math.abs(st.x) > lim) {
-      st.x = Math.sign(st.x) * lim;
+    const bounds = this.worldBounds;
+    if (st.x < bounds.x0 || st.x > bounds.x1) {
+      st.x = clamp(st.x,bounds.x0,bounds.x1);
       st.vx = 0;
     }
-    if (Math.abs(st.z) > lim) {
-      st.z = Math.sign(st.z) * lim;
+    if (st.z < bounds.z0 || st.z > bounds.z1) {
+      st.z = clamp(st.z,bounds.z0,bounds.z1);
       st.vz = 0;
     }
   }

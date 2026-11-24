@@ -9,17 +9,19 @@ export const HANDLING = {
   // ---------------------------------------------------------- engine & brakes
   /**
    * In another car's slipstream (draft 1 = right on its bumper): the air
-   * resistance is cut by this share, the engine keeps pulling this much past
-   * its usual top end, and the tow adds this push (m/s², fading out at that
-   * raised top end), so a car in a tow can go faster than it could alone.
+   * resistance is cut by this share. The speed allowance is used by the AI;
+   * actual extra speed comes from reduced drag, without extra engine power.
    */
-  slipstreamDragCut: 0.75,
-  slipstreamTopSpeed: 0.12,
-  slipstreamPush: 1.2,
-  /** Engine acceleration from standstill; it fades linearly to 0 at `maxSpeed`. */
-  engineAccel: 15,
-  /** Speed where the engine stops pulling (top speed ends up a bit lower, from drag). */
-  maxSpeed: 58,
+  slipstreamDragCut: 0.25,
+  slipstreamTopSpeed: 0.06,
+  /** Low-speed torque ceiling (m/s²); launch acceleration is limited by rear tyre traction. */
+  engineAccel: 30,
+  /** Available wheel power per unit dry vehicle mass (W/kg). */
+  enginePower: 900,
+  /** Engine speed ceiling (m/s); drag determines the achievable terminal speed below it. */
+  maxSpeed: 108,
+  /** Soft power roll-off over the final m/s before the speed ceiling. */
+  limiterBand: 8,
   brakeDecel: 24,
   reverseAccel: 7,
   reverseMaxSpeed: 11,
@@ -32,15 +34,15 @@ export const HANDLING = {
 
   // ------------------------------------------------------------------ gearbox
   /**
-   * Six gears. The engine pulls fully through the middle of the revs and less
+   * Eight gears. The engine pulls fully through the middle of the revs and less
    * at low revs and near the limiter (none at it). Changing at the right revs
    * gives the pull of `engineAccel` above, so the AI's speed plans still hold.
    * Manual and AI changes are instant; the automatic's changes up cut the
    * drive for a moment, which is what makes it a little slower.
    */
   gearbox: {
-    /** Speed (m/s) at the rev limit in each gear, 1st to 6th. */
-    top: [13, 20, 27, 35, 45, 58],
+    /** Speed (m/s) at the rev limit in each gear, 1st to 8th. */
+    top: [33, 42, 52, 62, 72, 82, 92, 108],
     /** Pull (share of full) at idle; full from `fullFrom` to `fullTo` of the rev limit; `limitPull` just under the limit. */
     lowPull: 0.55,
     fullFrom: 0.5,
@@ -56,7 +58,7 @@ export const HANDLING = {
      * change, a moment for the automatic's (what makes it a little slower).
      */
     shiftTime: 0,
-    autoShiftTime: 0.2,
+    autoShiftTime: 0.08,
   },
 
   // ----------------------------------------------------------------- steering

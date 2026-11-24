@@ -148,7 +148,7 @@ test('inside defence responds to a realistic threat before a braking corner, nev
   const track = getSampleTrack(1), driver = new RacingDriver(track, aiPace(0.9, track));
   const bend = brakingBends(track, driver)[0], me = new CarPhysics(track), player = new CarPhysics(track);
   let defended = false;
-  for (let before = 140; before >= 35; before -= 5) {
+  for (let before = 280; before >= 70; before -= 5) {
     const s = bend.brake - before;
     me.placeAt(s, driver.lateralAt(s)); me.state.speed = driver.speedAt(s);
     player.placeAt(s - 11.2, driver.lateralAt(s - 11.2)); player.state.speed = me.state.speed + 0.5;

@@ -93,6 +93,8 @@ const MAX_TRACKS = 40;
 export const GHOST_BUDGET = 450_000;
 const INDEX_KEY = 'records.index';
 const key = (id: string) => `records.${id}`;
+/** Old compact-circuit records remain stored under their original ids. */
+const recordId = (id:string) => id.startsWith('world-') ? `full-v1/${id}` : id;
 
 /** Retain old best times even when their optional telemetry is absent or damaged. */
 function cleanBest(raw: BestLap | null | undefined): BestLap | null {
@@ -110,6 +112,7 @@ export class RecordBook {
   private readonly cache = new Map<string, TrackRecord>();
 
   get(id: string): TrackRecord {
+    id = recordId(id);
     let r = this.cache.get(id);
     if (r) return r;
     const s = loadJSON<StoredRecord | null>(key(id), null);
@@ -125,6 +128,7 @@ export class RecordBook {
 
   /** Best lap, score and author time without decoding the ghost (for lists). */
   summary(id: string): { best: BestLap | null; bestScore: number; author: number | null | undefined } {
+    id = recordId(id);
     const r = this.cache.get(id);
     if (r) return { best: r.best, bestScore: r.bestScore, author: r.author };
     const s = loadJSON<StoredRecord | null>(key(id), null);
@@ -138,6 +142,7 @@ export class RecordBook {
   /** Writes a track's record after it changed. */
   save(id: string): void {
     const r = this.get(id);
+    id = recordId(id);
     const stored: StoredRecord = { scoreV: 2, best: r.best, bestScore: r.bestScore, ghost: r.ghost ? encodeGhost(r.ghost) : null };
     if (r.author !== undefined) {
       stored.author = r.author;
@@ -175,6 +180,7 @@ export class RecordBook {
 
   /** Forgets everything about a track (when it is deleted from the library). */
   forget(id: string): void {
+    id = recordId(id);
     this.cache.delete(id);
     storage.removeItem(key(id));
     saveJSON(

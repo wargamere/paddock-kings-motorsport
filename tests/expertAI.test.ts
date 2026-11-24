@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { STANDARD_CAR } from '../src/car/physics.ts';
+import { HANDLING } from '../src/config/handling.ts';
 import { newCareer, cleanCareer, aiDifficulty, carPerformance, lineup } from '../src/career/career.ts';
 import { builtInTracks } from '../src/editor/pipeline.ts';
 import { aiPace, aiPerformance } from '../src/race/ai.ts';
@@ -11,7 +12,7 @@ const start = (difficulty: number) => newCareer({ name: 'Expert', team: 'kestrel
 test('the original 1–100 pace curve and physical hardware remain unchanged', () => {
   const expected = [[0, .33, .4, .45], [.25, .53, .63, .55], [.5, .68, .79, .6], [.75, .84, .9, .75], [1, 1, 1, .9]];
   for (const [difficulty, grip, speed, brake] of expected) {
-    assert.deepEqual(aiPace(difficulty), { grip, maxSpeed: 58 * speed, brake });
+    assert.deepEqual(aiPace(difficulty), { grip, maxSpeed: HANDLING.maxSpeed * speed, brake });
     assert.equal(aiPerformance(difficulty, STANDARD_CAR), STANDARD_CAR);
   }
   const s = start(100); for (let r = 0; r < 24; r++) for (const e of lineup(s)) assert.ok(aiDifficulty(s, r, e.id) <= 1);

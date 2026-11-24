@@ -56,7 +56,7 @@ src/
               racingLineOverlay.ts (the racing line assist), rain.ts (rain),
               pitBoxMesh.ts (the pit box on the road), effects.ts and
               carEffects.ts (smoke, sparks and bits of car)
-  car/        physics.ts (fixed-step car physics: two axles, slip angles, load transfer, downforce), gearbox.ts (six gears),
+  car/        physics.ts (fixed-step car physics: two axles, slip angles, load transfer, downforce), gearbox.ts (eight gears),
               tyres.ts (kinds of tyre, wear curve),
               bindings.ts (keyboard keys),
               contact.ts (car-to-car bumps), slipstream.ts (drafting), input.ts
@@ -124,7 +124,7 @@ Physics runs at a fixed 120 Hz from an accumulator (`core/fixedStep.ts`), and re
 
 Compound working windows remain soft 85–105 °C, medium 90–112, hard 95–120, intermediates 55–85 and wets 45–75. The HUD shows **SURFACE / CORE** for each wheel, coloured independently: blue cold, green in the window, orange/red hot. A red surface alongside a green core is different from an entire tyre that is heat-soaked. Player and AI cars use the same thermal model; the AI plans against the grip available. These are gameplay approximations, not measured real-world tyre coefficients. Thermal tests cover recovery, sustained overheating, wet/dry compounds, time-step consistency and three-minute real-circuit stints.
 
-**Fuel and weight** (`FUEL`): a race starts with the tank filled for its distance (6 kg a km, game-sized so it weighs what a real car's does at the start, up to 110 kg) and burns it off, more on the throttle. The car weighs 800 kg empty: the engine, brakes and air push the extra weight too, the downforce is a smaller share of it, and the more heavily loaded tyres grip a little less, so a full car is slower and gets quicker lap by lap (the AI brakes earlier and corners a touch slower for it). Practice runs light. The HUD shows the fuel aboard.
+**Fuel and weight** (`FUEL`): a race starts with the tank filled for its distance (1.6 kg a km, game-sized so it weighs what a real car's does at the start, up to 110 kg) and burns it off, more on the throttle. The car weighs 800 kg empty: the engine, brakes and air push the extra weight too, the downforce is a smaller share of it, and the more heavily loaded tyres grip a little less, so a full car is slower and gets quicker lap by lap (the AI brakes earlier and corners a touch slower for it). Practice runs light. The HUD shows the fuel aboard.
 
 | | Keyboard | Gamepad | Touch |
 |---|---|---|---|
@@ -144,10 +144,10 @@ Compound working windows remain soft 85–105 °C, medium 90–112, hard 95–12
 
 **Your own keys** (`car/bindings.ts`, `ui/controlsPanel.ts`). The keyboard keys above are the defaults. ⌨ Controls, in the main menu and the pause menu, changes them: every driving action (drive, brake, steer left and right, gear up and down, reset, camera, pause, sound, timing tower) has two keys. Click one and press the new key; Esc cancels and Backspace clears it. A key already used by another action moves over, and the panel says from where. Reset to defaults puts them all back. Esc always pauses whatever you set, and Tab, Ctrl, Alt and the system keys can't be bound. Keys are physical keys (`KeyboardEvent.code`), shown as your keyboard layout prints them where the browser can say (Z for W on AZERTY). The race's controls hint, the pause menu and the assists panel all show your keys. The gamepad and touch controls don't change.
 
-**Gears** (`car/gearbox.ts`, tuning in `HANDLING.gearbox`). The car has six gears; the HUD shows the gear (R when reversing), AUTO or MAN, and a rev bar.
+**Gears** (`car/gearbox.ts`, tuning in `HANDLING.gearbox`). The car has eight gears; the HUD shows the gear (R when reversing), AUTO or MAN, and a rev bar.
 - *Revs:* the engine pulls fully from half the revs to 90 % of the limit, less low down (except in 1st, where the clutch slips to get going), tailing off above 90 %, and not at all on the limiter. Changing up at 90 % lands in the full band of the next gear.
 - *Manual:* E / Q (RB / LB, ▲ ▼ on touch) change up and down, one gear per press, instantly. A change down that would over-rev is refused, and the car drops to 1st when it stops. The rev bar turns red from the change-up point and flashes on the limiter. Leave it in too high a gear out of a corner and it pulls weakly; leave it in too low a gear and it sits on the limiter.
-- *Automatic (the default):* changes at the same revs as the AI, but each change up cuts the drive for 0.2 s. That makes it a little slower than changing gear yourself at the right revs: about 0.6 % a lap on average (0.15–1 % depending on the track), say 0.2–0.4 s on a 40-second lap.
+- *Automatic (the default):* changes at the same revs as the AI, but each change up cuts the drive for 0.08 s. A timely manual change avoids that short interruption.
 - *AI cars and the medal bot* change instantly at the ideal points, without an automatic shift delay; pinned medal targets are regenerated when the physics version changes.
 - The engine sound follows the real revs, dropping at every change up.
 
@@ -301,7 +301,7 @@ Built-in tracks (`track/catalog.ts`, listed by `builtInTracks()` in `editor/pipe
   - A loop is kept only if it's a valid road with no crossings, 1.1–2.4 km with at least 5 real bends, and an AI can lap it at medal pace and flat out.
 - **Real circuits (30):** real-world layouts (`track/data/world.ts`), made from the open GeoJSON outlines in [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits) (MIT licence, see `THIRD_PARTY_NOTICES.md`; the game shows it too, under the Real circuits tab). They're named after their place, with no series branding, and are unofficial.
   - The tracks: Sakhir, Jeddah, Melbourne, Suzuka, Shanghai, Miami, Imola, Monaco, Montréal, Barcelona, Spielberg, Silverstone, Budapest, Spa-Francorchamps, Zandvoort, Monza, Baku, Singapore, Austin, Mexico City, São Paulo, Las Vegas, Lusail, Yas Marina, Portimão, Istanbul, Sepang, Hockenheim, Nürburg and Mugello.
-  - *Fitting:* each outline is turned to fill the drawing area best, then scaled down to fit the canvas (1.3–2.35 km; the real ones are 3.3–7 km).
+  - *Physical scale:* compact source outlines are restored to their published full circuit lengths (3.3–7 km) when loaded. The editor expands its paper to fit; road and car widths stay in metres. These remain approximate outlines, without new surveyed corner detail. See [F1 speeds and full-size circuits](docs/full-size-circuits.md).
   - *Start and direction:* the start is moved back up the straight if the outline began right by a bend, and they run the way the race does (Singapore's outline is drawn the other way, so it's reversed).
   - *Making it drivable:* corners too tight for the car are opened up a little. Where the real road comes back close by, the road is narrowed to 10 m (Jeddah, Miami, Monaco, Baku, Suzuka), and only if even that's not enough are those stretches pushed apart a little (Jeddah, Baku).
   - Suzuka's crossover is a bridge, the later road rising 7.5 m over the earlier one.
@@ -408,14 +408,14 @@ The field spreads up to 8 points below the chosen difficulty, so the cars don't 
 
 then it:
 - steps 3.5 m off the line to the side with more room over the next 40 m (or the other side of the line from the quicker car, if that's already well to one side);
-- drives at 85 % of its pace, and once the quicker car has pulled out beside it, at half throttle too (but not in the middle of a tight bend, where a car slowing is a hazard);
+- drives at 85 % of its pace, and once the quicker car has pulled out beside it, at half throttle too (only once clear across the road in a tight bend);
 - carries on until the quicker car is a car length ahead, drops well back, or 8 s have gone.
 
 The quicker car is told which side the slower one has taken and passes on the other, usually on the racing line. This works only between AI cars: they don't move over for you, and you don't have to move over for them.
 
 **Slipstream** (`car/slipstream.ts`). It's the same for every car, yours included, and it's what lets you get a run on an AI along a straight.
 - **Stronger the closer you get:** its strength depends on the time gap to the car ahead (bumper to bumper), as in Speed Dreams' physics: exp(−gap / speed / 0.35 s). Right on the bumper it's full, half a second back it's a quarter, and it reaches out 60 m. The wake is 1.6 m to either side right behind the car, widening 7 cm per metre back.
-- **What it does:** up to 75 % less drag, and the engine keeps pulling up to 12 % past its usual top end, plus a tow of up to 1.2 m/s². So in a tow you go faster than you could alone ("overspeed"): top speed about 167 km/h alone, about 200 km/h 5 m behind a car, about 182 km/h 15 m back. 5 m behind a car at 30 m/s it pulls about 1.4 m/s² harder.
+- **What it does:** up to 25 % less drag. The extra speed comes from reduced air resistance, using the same torque/power curve; there is no additional tow force. The standard medium-wing car settles near 323 km/h on an unrestricted straight. A lower wing, DRS and a tow change its drag-limited speed.
 - **Slingshot:** pulling out of the wake, you keep the tow for a moment, fading over 0.4 s, so you can draw alongside.
 - Both cars must be going the same way at the same level. AI cars use it too: in a tow an AI may go past its own top speed.
 - **HUD:** "SLIPSTREAM" shows above the speedometer while you're in one, and its bar fills with how strong the tow is.
@@ -613,11 +613,11 @@ Race setup → *Players: 2* (a single race; not the career). The screen splits: 
 
 In a race with AI cars (`race/drs.ts`, `config/race.ts` `DRS` and `ERS`):
 
-- **DRS zones.** On a real circuit they're where its real ones are (`DRS_REAL` in `config/race.ts`: Sakhir and Jeddah 3, Melbourne 4, Suzuka, Imola, Monaco and Lusail 1, Monza, Silverstone and Spa 2, and so on): each is put on the straight nearest that point of the lap, where nothing holds the quickest car below 80 % of its top speed; a real zone with no straight for it on the scaled-down layout is left out. On a track you made, the zones you drew in the editor (below). Otherwise they're the track's longest straights, where nothing holds the quickest car below 90 % of its top speed for at least 200 m (at most two; every track gets its longest straight of at least 110 m). A zone starts 15 m after the bend before it and ends 15 m before the braking for the next.
+- **DRS zones.** On a real circuit they're where its real ones are (`DRS_REAL` in `config/race.ts`: Sakhir and Jeddah 3, Melbourne 4, Suzuka, Imola, Monaco and Lusail 1, Monza, Silverstone and Spa 2, and so on): each is put on the straight nearest that point of the lap, where nothing holds the quickest car below 80 % of its top speed; a zone without a suitable straight on the approximate outline is left out. On a track you made, the zones you drew in the editor (below). Otherwise they're the track's longest straights, where nothing holds the quickest car below 90 % of its top speed for at least 200 m (at most two; every track gets its longest straight of at least 110 m). A zone starts 15 m after the bend before it and ends 15 m before the braking for the next.
 - **Your own DRS zones:** Track editor → *Start & pits* → *DRS zones* → *Draw zones*. Tap the road where a zone starts, then where it ends (it runs forwards round the lap; at least 40 m, at most four zones); tap a zone to take it away; *Automatic* goes back to the track's own. The zones show on the map in green, with the detection line before each. They're saved with the track and in its share code (`track/extras.ts` `DrsMark`, code block tag 3), and run the other way when you reverse the track.
 - **On the minimap** the zones are green.
-- **Detection:** cross a zone's detection point (80 m before it) within 1 s of the car ahead and you're cleared for that zone: the DRS light on the HUD turns amber (*DRS READY*). In the zone the flap opens by itself at full throttle (the light goes green and *DRS OPEN* shows across the top of the screen) and shuts the moment you brake: 45 % less drag, a little more push and up to 9 % more top speed (about twice the gain it used to give). DRS is enabled from the second lap, in the dry, and never behind the safety car; your race engineer tells you when it's on.
-- **The overtake boost** (hold Space, B on a gamepad, BOOST on a touch screen): 2.4 m/s² more push and up to 4 % more top speed while the battery lasts (about 8 s from full). Braking charges it. Everyone starts with a full battery; the HUD shows yours under the tyres, with the key that works it, and your race engineer explains it at the start.
+- **Detection:** cross a zone's detection point (80 m before it) within 1 s of the car ahead and you're cleared for that zone: the DRS light on the HUD turns amber (*DRS READY*). In the zone the flap opens by itself at full throttle (the light goes green and *DRS OPEN* shows across the top of the screen) and shuts the moment you brake: 14 % less drag, with its actual speed gain determined by power, gearing and straight length. DRS is enabled from the second lap, in the dry, and never behind the safety car; your race engineer tells you when it's on.
+- **The overtake boost** (hold Space, B on a gamepad, BOOST on a touch screen): 150 W/kg of additional wheel power while the battery lasts (about 8 s from full). Braking charges it. Everyone starts with a full battery; the HUD shows yours under the tyres, with the key that works it, and your race engineer explains it at the start.
 - **The AI uses both:** DRS where it's cleared, and the boost on a straight at full throttle to pass a car within 30 m or keep one within 14 m behind, keeping 30 % back until the last lap.
 - **Tests:** `tests/drs.test.ts` (the real zones on every real circuit, drawn zones, detection and clearance tick by tick, DRS and the boost on a straight, charging, damage looks).
     - In practice it's only a message: reset the car (R) for a fresh one.

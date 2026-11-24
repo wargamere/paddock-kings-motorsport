@@ -19,8 +19,11 @@ export class TyreThermal {
       const surface=this.surface[i],core=this.core[i];
       // The contact solver already allocates work to the loaded outside tyres.
       // Only rolling/flex heat uses load here, avoiding a second cornering-work multiplier.
-      const load=.75+.25*Math.sqrt(clamp(patches[i].load>0?patches[i].load/(9.81/4):1,.1,6));
-      const power=Math.max(0,work[i]*blend);
+      const pressure=clamp(patches[i].load>0?patches[i].load/(9.81/4):1,.1,6);
+      const load=.75+.25*Math.sqrt(pressure);
+      // At high downforce the contact area also grows. Heat input is a work
+      // density, so a loaded tyre does not absorb all extra force into the same area.
+      const power=Math.max(0,work[i]*blend)/Math.sqrt(pressure);
       const retained=power/(1+power/T.workSaturation);
       const roll=T.roll*v/(1+v/T.rollSpeed)*load;
       const exchange=(surface-core)*T.coreExchange;

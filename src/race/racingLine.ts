@@ -1,4 +1,5 @@
 import { HANDLING, SIM } from '../config/handling.ts';
+import { engineAcceleration, terminalSpeed } from '../car/powertrain.ts';
 import { aeroOf, STANDARD_CAR, type CarPerformance } from '../car/physics.ts';
 import { RACING_LINE, SETUP, type CarSetup } from '../config/race.ts';
 import { kerbAt, kerbLayout } from '../track/kerbs.ts';
@@ -215,19 +216,22 @@ export interface Pace {
   /** Physical engine pull and speed ceiling, independent of driver ability. */
   pull?: number;
   top?: number;
+  /** Available tyre traction, independent of the driver's chosen cornering pace. */
+  traction?: number;
 }
 
 /** A driver's pace in its actual car and setup, before road/weather/tyre adjustments. */
 export function carPace(p: Pace, setup: CarSetup, tune: Readonly<CarPerformance> = STANDARD_CAR): Pace {
   const wing = aeroOf(setup), gears = SETUP.gears[setup.gears];
   const engine = { pull: tune.pull * gears.pull, top: tune.top * gears.top };
-  return { ...p, ...engine, grip: p.grip * tune.grip, maxSpeed: p.maxSpeed * topSpeed(wing.drag, engine) / topSpeed(), downforce: wing.downforce, drag: wing.drag };
+  const drag = wing.drag / (tune.top * tune.top);
+  return { ...p, ...engine, grip: p.grip * tune.grip, traction:tune.grip, maxSpeed: p.maxSpeed * topSpeed(drag, engine) / topSpeed(), downforce: wing.downforce, drag };
 }
 
 /** The same pace on `track`'s road surface: the share of the grip and the brakes dirt or snow gives (HANDLING.roads). */
 export function roadPace(p: Pace, track: Track): Pace {
   const r = HANDLING.roads[track.options.road];
-  return r.grip === 1 && r.brake === 1 ? p : { ...p, grip: p.grip * r.grip, brake: p.brake * r.brake };
+  return r.grip === 1 && r.brake === 1 ? p : { ...p, grip: p.grip * r.grip, traction:(p.traction??1)*r.grip, brake: p.brake * r.brake };
 }
 
 /**
@@ -255,18 +259,15 @@ export const brakingDecel = (brake: number, v: number, grade: number, drag = 1, 
 
 /** The car's top speed on the flat (m/s) with drag × `drag` (the wing): where the engine's pull meets the drag. */
 export function topSpeed(drag = 1, tune: Pick<CarPerformance, 'pull' | 'top'> = STANDARD_CAR): number {
-  const H = HANDLING;
-  // engineAccel (1 − v / maxSpeed) = rollingDrag + aeroDrag·drag·v²
-  const a = H.aeroDrag * drag;
-  const b = H.engineAccel * tune.pull / (H.maxSpeed * tune.top);
-  const c = H.rollingDrag - H.engineAccel * tune.pull;
-  return (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+  return terminalSpeed(drag, tune.pull, tune.top);
 }
 
 /** Full-throttle acceleration used by both the racing line and overtaking lane plans. */
 export function drivingAccel(v: number, pace: Pace, grade: number): number {
   const H = HANDLING;
-  return H.engineAccel * (pace.pull ?? 1) * Math.max(0, 1 - v / (H.maxSpeed * (pace.top ?? 1))) - H.rollingDrag - H.aeroDrag * (pace.drag ?? 1) * v * v - G * H.slopeFactor * grade;
+  const downforce=1+(SIM.downforce+(pace.downforce??0))*(v/SETUP.downforceSpeed)**2;
+  const driveGrip=H.maxLateralAccel*SIM.grip*SIM.rearGrip*SIM.driveGrip*(1-SIM.frontWeight+.08)*downforce*(pace.traction??1);
+  return Math.min(driveGrip,engineAcceleration(v, pace.pull ?? 1, pace.top ?? 1)) - H.rollingDrag - H.aeroDrag * (pace.drag ?? 1) * v * v - G * H.slopeFactor * grade;
 }
 
 /**

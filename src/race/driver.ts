@@ -114,8 +114,9 @@ export class RacingDriver {
     const lat = (x: number) => this.lateralAt(x, o);
     for (let i = 0; i < n; i++) {
       const s = i * c.spacing;
-      const k = this.pathCurvature(s, lat);
-      v[i] = Math.min(this.pace.maxSpeed, cornerSpeed(k, c.bank[i], this.pace.grip * DRIVER.offLineGrip, this.pace.downforce));
+      const k = this.pathCurvature(s, lat, true, true);
+      const reserve = 1 - (1 - DRIVER.offLineGrip) * Math.min(1, Math.abs(o) / 3);
+      v[i] = Math.min(this.pace.maxSpeed, cornerSpeed(k, c.bank[i], this.pace.grip * reserve, this.pace.downforce));
     }
     // Light smoothing (the curvature of a shifted path is a little noisy), keeping the lows.
     const sm = new Float32Array(n);
@@ -157,6 +158,16 @@ export class RacingDriver {
   laneSpeedAt(s: number, lane: number): number {
     if (Math.abs(lane) < DRIVER.offLine) return this.at(this.speed, s);
     return this.betweenLanes(this.laneSpeeds, s, lane);
+  }
+
+  /** The same torque/power/traction envelope used by our acceleration plan. */
+  accelerationAt(s:number,speed:number):number {
+    const c=this.track.center;
+    const corner=cornerSpeed(this.curvatureAt(s),this.at(c.bank,s),this.pace.grip,this.pace.downforce);
+    // Cornering already spends part of the tyres' force budget. A straight-line
+    // launch forecast through a tight bend invents passing opportunities.
+    const available=Math.sqrt(Math.max(0,1-(speed/Math.max(1,corner))**4));
+    return Math.max(0,drivingAccel(speed,this.pace,this.at(c.grade,s)))*available;
   }
 
   /**
@@ -421,7 +432,7 @@ export class RacingDriver {
     const sk = st.s + v * DRIVER.curvaturePreview;
     // (Bent round a car beside us: wherever the stretch we keep to cuts the path.)
     const bent = route !== null || (kept !== null && Math.abs(path(st.s + look) - this.lateralAt(st.s + look, lane)) > 0.05);
-    const kAhead = bent || Math.abs(lane) > DRIVER.offLine ? this.pathCurvature(sk, path, !offRoad, route !== null) : this.at(this.line.curvature, sk);
+    const kAhead = bent || Math.abs(lane) > DRIVER.offLine ? this.pathCurvature(sk, path, !offRoad, true) : this.at(this.line.curvature, sk);
     const k = (2 * Math.sin(alpha)) / dist + DRIVER.curvatureFeed * kAhead;
     const lock = H.maxSteerAngle / (1 + Math.abs(st.speed) / H.steerFalloff);
     o.steer = clamp(Math.atan(k * H.wheelBase) / lock, -1, 1);

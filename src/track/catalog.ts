@@ -1,6 +1,7 @@
 import type { TrackOptions } from '../config/track.ts';
 import type { Dot } from '../core/math.ts';
 import type { TrackDef } from './track.ts';
+import { circuitScale } from './circuitScale.ts';
 
 /** A built-in track as stored in src/track/data (written by scripts/buildTracks.ts). */
 export interface BakedTrack {
@@ -25,5 +26,5 @@ export function bakedDef(b: BakedTrack): TrackDef {
     const h = b.hs?.[i / 2] ?? 0;
     control.push(h ? { x: b.pts[i], y: b.pts[i + 1], h } : { x: b.pts[i], y: b.pts[i + 1] });
   }
-  return { id: b.id, name: b.name, control, options: b.options, builtIn: true, place: b.place };
+  return { id: b.id, name: b.name, control: circuitScale(control,b.id), options: b.options, builtIn: true, place: b.place };
 }

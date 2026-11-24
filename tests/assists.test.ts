@@ -58,9 +58,9 @@ test('manual gears: one change per request, no over-revving change down, and 1st
   assert.equal(gs.gear, 3);
   stepGearbox(gs, 'manual', 0, 10, 1 / 120);
   assert.equal(gs.gear, 3, 'stays without a request');
-  // 25 m/s in 1st would be way past the limiter: refused.
+  // A downshift above the first-gear limiter is refused.
   gs.gear = 2;
-  stepGearbox(gs, 'manual', -1, 25, 1 / 120);
+  stepGearbox(gs, 'manual', -1, G.top[0]+1, 1 / 120);
   assert.equal(gs.gear, 2);
   stepGearbox(gs, 'manual', 0, 0.2, 1 / 120);
   assert.equal(gs.gear, 1, 'nearly stopped: 1st');
@@ -75,8 +75,8 @@ test('stuck in 1st with manual gears, the limiter holds the car to 1st gear spee
 });
 
 test('the AI gearbox and current physics reproduce the pinned medal targets', () => {
-  // Author version 9: per-compound surface/core heat, recovery and thermal grip.
-  const targets = [34.03, 33.95, 33.10];
+  // Author version 10: torque/power engine, eight gears and traction-limited plans.
+  const targets = [28.19, 30.24, 32.29];
   for (let i = 0; i < 3; i++) {
     const t = getSampleTrack(i);
     const lap = new AuthorLap(t).finish();

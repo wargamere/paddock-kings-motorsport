@@ -19,14 +19,15 @@ for (const entry of builtInTracks().filter(t => t.group === 'world')) {
       return { s: st.s, lateral: st.lateral, along: st.vx * tan.x + st.vz * tan.y, offTrack: st.offTrack };
     };
     let walls = 0, off = 0, chicaneMinimum = Infinity;
-    for (let tick = 0; tick < HANDLING.tickRate * 350 && ai.session.phase !== 'finished'; tick++) {
+    const budget=Math.max(350,t.center.length/20*5);
+    for (let tick = 0; tick < HANDLING.tickRate * budget && ai.session.phase !== 'finished'; tick++) {
       const prev = progress(); ai.car.step(ai.drive([st], ai.car.dt)); ai.session.step(prev, progress(), events);
       if (ai.session.laps.length > 0) {
         if (st.wallHit) walls++;
         if (st.offTrack) off++;
         // The exit of Melbourne's fast left-right: no repeated recovery lift
         // after a controlled direction change (previously dropped below 36 m/s).
-        if (t.def.id === 'world-au-1953' && st.s > 710 && st.s < 740) chicaneMinimum = Math.min(chicaneMinimum, st.speed);
+        if (t.def.id === 'world-au-1953' && st.s/t.center.length > .429 && st.s/t.center.length < .448) chicaneMinimum = Math.min(chicaneMinimum, st.speed);
       }
     }
     assert.equal(ai.session.laps.length, 4);
@@ -34,7 +35,8 @@ for (const entry of builtInTracks().filter(t => t.group === 'world')) {
     assert.equal(walls, 0); assert.equal(off, 0);
     assert.ok(!events.some(e => e.type === 'missedCheckpoint'));
     const flying = ai.session.laps.slice(1);
-    assert.ok(Math.max(...flying) - Math.min(...flying) < .25, `flying laps: ${flying.join(', ')}`);
+    const mean=flying.reduce((a,b)=>a+b,0)/flying.length;
+    assert.ok(Math.max(...flying) - Math.min(...flying) < mean*.006, `flying laps: ${flying.join(', ')}`);
     if (t.def.id === 'world-au-1953') assert.ok(chicaneMinimum > 37.5, `chicane exit: ${chicaneMinimum.toFixed(2)} m/s`);
   });
   }
